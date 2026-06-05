@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSLocationTemporaryUsageDescriptionDictionary</key>
+    <dict>
+      <key>LocationAccuracyAuthorizationDescription</key>
+      <string>Please enable precise location. Turn-by-turn directions only work when precise location data is available.</string>
+    </dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>SlipStream uses your location to display your position on the map to you and other users</string>
+	<key>MBXAccessToken</key>
+	<string>pk.eyJ1IjoibmluamFrYWliIiwiYSI6ImNsc3Awdzl3ZjA4dWQyanFqMXp3MTEwMnQifQ.Xg7nbD13lkYea6tBuyApfw</string>
+</dict>
+</plist>
