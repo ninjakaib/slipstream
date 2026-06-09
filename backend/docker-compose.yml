@@ -1,4 +1,3 @@
-# =============================================================================
 # SlipStream Backend Docker Compose Configuration
 #
 # Usage:
@@ -8,7 +7,6 @@
 # =============================================================================
 
 services:
-
   # ==========================================================================
   # Postgres - Primary database with PostGIS
   # ==========================================================================
@@ -25,7 +23,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-slipstream}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-slipstream}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -97,7 +99,10 @@ services:
             - __pycache__/
             - "*.pyc"
             - .venv/
-        # Sync alembic migrations
+        # Sync alembic config and migrations
+        - action: sync
+          path: ./alembic.ini
+          target: /project/alembic.ini
         - action: sync+restart
           path: ./alembic
           target: /project/alembic

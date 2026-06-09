@@ -122,5 +122,6 @@ FROM api AS api-dev
 USER root
 COPY --from=build --chown=app:app /project /project
 USER app
+WORKDIR /project
 
 CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

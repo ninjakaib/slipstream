@@ -7,7 +7,9 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/slipstream"
+    database_url: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/slipstream"
+    )
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -22,7 +24,7 @@ class Settings(BaseSettings):
     app_name: str = "SlipStream"
     debug: bool = False
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

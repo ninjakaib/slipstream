@@ -20,6 +20,11 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
+def _enum_values(enum_class):
+    """Extract .value from each member — ensures PostgreSQL enum uses lowercase values."""
+    return [e.value for e in enum_class]
+
+
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
 
@@ -95,7 +100,7 @@ class User(Base):
     display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     visibility: Mapped[VisibilityMode] = mapped_column(
-        Enum(VisibilityMode, name="visibility_mode"),
+        Enum(VisibilityMode, name="visibility_mode", values_callable=_enum_values),
         default=VisibilityMode.ON,
         server_default=VisibilityMode.ON.value,
     )
@@ -103,7 +108,7 @@ class User(Base):
         Integer, default=15, server_default="15"
     )
     speed_unit: Mapped[SpeedUnit] = mapped_column(
-        Enum(SpeedUnit, name="speed_unit"),
+        Enum(SpeedUnit, name="speed_unit", values_callable=_enum_values),
         default=SpeedUnit.MPH,
         server_default=SpeedUnit.MPH.value,
     )
@@ -178,7 +183,7 @@ class Friendship(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     status: Mapped[FriendshipStatus] = mapped_column(
-        Enum(FriendshipStatus, name="friendship_status"),
+        Enum(FriendshipStatus, name="friendship_status", values_callable=_enum_values),
         default=FriendshipStatus.PENDING,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -213,11 +218,11 @@ class Convoy(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     visibility: Mapped[ConvoyVisibility] = mapped_column(
-        Enum(ConvoyVisibility, name="convoy_visibility"),
+        Enum(ConvoyVisibility, name="convoy_visibility", values_callable=_enum_values),
         default=ConvoyVisibility.PUBLIC,
     )
     status: Mapped[ConvoyStatus] = mapped_column(
-        Enum(ConvoyStatus, name="convoy_status"),
+        Enum(ConvoyStatus, name="convoy_status", values_callable=_enum_values),
         default=ConvoyStatus.FORMING,
     )
     destination_name: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -260,7 +265,7 @@ class ConvoyMember(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     role: Mapped[ConvoyMemberRole] = mapped_column(
-        Enum(ConvoyMemberRole, name="convoy_member_role"),
+        Enum(ConvoyMemberRole, name="convoy_member_role", values_callable=_enum_values),
         default=ConvoyMemberRole.MEMBER,
     )
     joined_at: Mapped[datetime] = mapped_column(
@@ -294,7 +299,9 @@ class ConvoyJoinRequest(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     status: Mapped[JoinRequestStatus] = mapped_column(
-        Enum(JoinRequestStatus, name="join_request_status"),
+        Enum(
+            JoinRequestStatus, name="join_request_status", values_callable=_enum_values
+        ),
         default=JoinRequestStatus.PENDING,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -322,7 +329,7 @@ class ConvoyMessage(Base):
     )
     content: Mapped[str] = mapped_column(Text)
     message_type: Mapped[MessageType] = mapped_column(
-        Enum(MessageType, name="message_type"),
+        Enum(MessageType, name="message_type", values_callable=_enum_values),
         default=MessageType.TEXT,
     )
     created_at: Mapped[datetime] = mapped_column(
