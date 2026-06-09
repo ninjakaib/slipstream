@@ -1,5 +1,6 @@
 """Authentication utilities — password hashing and JWT management."""
 
+import hashlib
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -37,14 +38,18 @@ def generate_refresh_token() -> str:
 
 
 def hash_refresh_token(token: str) -> str:
-    """Hash a refresh token for storage (same bcrypt approach as passwords)."""
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(token.encode(), salt).decode()
+    """Hash a refresh token using SHA-256 for fast indexed lookup.
+
+    Refresh tokens are already high-entropy (64 bytes from secrets.token_urlsafe),
+    so they don't need slow hashing like passwords — they need fast, deterministic
+    hashing for direct database lookup.
+    """
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def verify_refresh_token(token: str, hashed: str) -> bool:
-    """Verify a refresh token against its stored hash."""
-    return bcrypt.checkpw(token.encode(), hashed.encode())
+    """Verify a refresh token against its stored SHA-256 hash."""
+    return hashlib.sha256(token.encode()).hexdigest() == hashed
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +67,9 @@ def create_access_token(user_id: uuid.UUID, username: str) -> str:
         "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
         "type": "access",
     }
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+    )
 
 
 def decode_access_token(token: str) -> dict:

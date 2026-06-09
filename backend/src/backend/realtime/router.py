@@ -10,6 +10,7 @@ Handles:
 import asyncio
 import json
 import logging
+import time
 import uuid
 
 import jwt
@@ -20,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth import decode_access_token
 from backend.database import async_session_factory
 from backend.models import User, VisibilityMode
-from backend.realtime.events import remove_user_presence
 from backend.realtime.handlers import (
     handle_convoy_message,
     handle_heartbeat,
@@ -32,7 +32,7 @@ from backend.realtime.handlers import (
     load_friend_ids,
     refresh_subscriptions,
 )
-from backend.realtime.manager import manager
+from backend.realtime.manager import UserConnection, manager
 from backend.redis import get_redis
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,9 @@ SUBSCRIPTION_REFRESH_INTERVAL = 30  # seconds
 
 # How often to refresh friend lists from DB
 FRIEND_REFRESH_INTERVAL = 60  # seconds
+
+# Minimum interval between location updates (rate limit)
+LOCATION_UPDATE_MIN_INTERVAL = 1.0  # seconds
 
 
 @router.websocket("/ws")
@@ -144,8 +147,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         except asyncio.CancelledError:
             pass
 
-        # Remove presence and position data
-        await remove_user_presence(user_id)
+        # Mark user as offline but let position data expire naturally (120s TTL).
+        # This allows brief disconnects without the user vanishing from the map.
+        r = get_redis()
+        await r.delete(f"presence:{user_id_str}")
 
         # Disconnect from manager (cleans up all channel subscriptions)
         manager.disconnect(user_id)
@@ -153,8 +158,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         logger.info(f"WebSocket fully cleaned up: {username} ({user_id})")
 
 
-async def _message_loop(conn) -> None:
+async def _message_loop(conn: UserConnection) -> None:
     """Receive and dispatch incoming WebSocket messages."""
+    last_location_ts: float = 0.0
+
     while True:
         raw = await conn.websocket.receive_text()
 
@@ -169,39 +176,64 @@ async def _message_loop(conn) -> None:
         msg_type = message.get("type")
         payload = message.get("payload", {})
 
-        if msg_type == "location_update":
-            await handle_location_update(conn, payload, manager)
+        try:
+            if msg_type == "location_update":
+                # Rate limit: max 1 location update per second
+                now = time.time()
+                if (now - last_location_ts) < LOCATION_UPDATE_MIN_INTERVAL:
+                    continue
+                last_location_ts = now
+                await handle_location_update(conn, payload, manager)
 
-        elif msg_type == "heartbeat":
-            await handle_heartbeat(conn)
-            # Send heartbeat ack so client knows connection is alive
-            await conn.websocket.send_json({"type": "heartbeat_ack"})
+            elif msg_type == "heartbeat":
+                await handle_heartbeat(conn)
+                # Send heartbeat ack so client knows connection is alive
+                await conn.websocket.send_json({"type": "heartbeat_ack"})
 
-        elif msg_type == "status_change":
-            await handle_status_change(conn, payload)
+            elif msg_type == "status_change":
+                await handle_status_change(conn, payload)
 
-        elif msg_type == "subscribe_area":
-            # This needs a DB session for visibility/friend checks
-            async with async_session_factory() as db:
-                await handle_subscribe_area(conn, payload, manager, db)
+            elif msg_type == "subscribe_area":
+                # This needs a DB session for visibility/friend checks
+                async with async_session_factory() as db:
+                    await handle_subscribe_area(conn, payload, manager, db)
 
-        elif msg_type == "convoy_message":
-            async with async_session_factory() as db:
-                await handle_convoy_message(conn, payload, db)
-                await db.commit()
+            elif msg_type == "convoy_message":
+                async with async_session_factory() as db:
+                    await handle_convoy_message(conn, payload, db)
+                    await db.commit()
 
-        elif msg_type == "quick_action":
-            async with async_session_factory() as db:
-                await handle_quick_action(conn, payload, db)
-                await db.commit()
+            elif msg_type == "quick_action":
+                async with async_session_factory() as db:
+                    await handle_quick_action(conn, payload, db)
+                    await db.commit()
 
-        else:
-            await conn.websocket.send_json(
-                {
-                    "type": "error",
-                    "payload": {"message": f"Unknown message type: {msg_type}"},
-                }
+            else:
+                await conn.websocket.send_json(
+                    {
+                        "type": "error",
+                        "payload": {"message": f"Unknown message type: {msg_type}"},
+                    }
+                )
+
+        except WebSocketDisconnect:
+            raise  # Let the outer handler catch this
+        except Exception as e:
+            logger.error(
+                f"Error handling '{msg_type}' for {conn.username}: {e}",
+                exc_info=True,
             )
+            # Inform client but don't kill the connection
+            try:
+                await conn.websocket.send_json(
+                    {
+                        "type": "error",
+                        "payload": {"message": "Internal error processing message"},
+                    }
+                )
+            except Exception:
+                # If we can't even send the error, the connection is dead
+                raise WebSocketDisconnect(code=1011)
 
 
 async def _subscription_refresh_loop(conn, discovery_radius: int) -> None:

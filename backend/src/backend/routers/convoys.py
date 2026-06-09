@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from geoalchemy2.functions import ST_X, ST_Y
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -398,19 +398,9 @@ async def end_convoy(
     convoy.status = ConvoyStatus.ENDED
     convoy.ended_at = datetime.now(UTC)
 
-    # Delete all messages (ephemeral chat)
-    result = await db.execute(
-        select(ConvoyMessage).where(ConvoyMessage.convoy_id == convoy_id)
-    )
-    for msg in result.scalars().all():
-        await db.delete(msg)
-
-    # Remove all members
-    result = await db.execute(
-        select(ConvoyMember).where(ConvoyMember.convoy_id == convoy_id)
-    )
-    for member in result.scalars().all():
-        await db.delete(member)
+    # Bulk delete all messages (ephemeral chat) and members
+    await db.execute(delete(ConvoyMessage).where(ConvoyMessage.convoy_id == convoy_id))
+    await db.execute(delete(ConvoyMember).where(ConvoyMember.convoy_id == convoy_id))
 
     # Publish convoy_ended event and clean up Redis
     await publish_convoy_event(

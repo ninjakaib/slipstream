@@ -86,7 +86,11 @@ async def handle_location_update(
         # 3. Refresh TTL on position hash (120s — auto-expire if updates stop)
         pipe.expire(f"pos:{user_id_str}", 120)
 
-        # 4. Publish to this user's location channel for subscriber fanout
+        # 4. Refresh presence (so actively-updating users stay visible even
+        #    if heartbeat messages are delayed or lost)
+        pipe.set(f"presence:{user_id_str}", "online", ex=30)
+
+        # 5. Publish to this user's location channel for subscriber fanout
         pipe.publish(
             f"location:{user_id_str}",
             json.dumps(
@@ -208,19 +212,36 @@ async def refresh_subscriptions(
         return
 
     # Exclude self
-    nearby_user_ids: set[str] = set(results) - {user_id_str}
+    nearby_user_ids: list[str] = [uid for uid in results if uid != user_id_str]
 
-    # Apply visibility filtering
+    if not nearby_user_ids:
+        # No one nearby — unsubscribe from all location channels
+        current_location_channels = {
+            ch for ch in conn.subscribed_channels if ch.startswith("location:")
+        }
+        for channel in current_location_channels:
+            mgr.unsubscribe(conn.user_id, channel)
+            target_uid = channel.removeprefix("location:")
+            await mgr.send_to_user(
+                conn.user_id,
+                {"type": "driver_exited", "payload": {"user_id": target_uid}},
+            )
+        return
+
+    # Batch fetch presence and position data via pipeline (avoid N+1 round-trips)
+    async with r.pipeline(transaction=False) as pipe:
+        for uid_str in nearby_user_ids:
+            pipe.exists(f"presence:{uid_str}")
+            pipe.hgetall(f"pos:{uid_str}")
+        pipeline_results = await pipe.execute()
+
+    # Apply visibility filtering using batched results
     visible_user_ids: set[str] = set()
-    for uid_str in nearby_user_ids:
-        # Check presence (are they actually online?)
-        presence = await r.exists(f"presence:{uid_str}")
-        if not presence:
-            continue
+    for i, uid_str in enumerate(nearby_user_ids):
+        presence = pipeline_results[i * 2]
+        pos_data = pipeline_results[i * 2 + 1]
 
-        # Check their visibility via position hash
-        pos_data = await r.hgetall(f"pos:{uid_str}")
-        if not pos_data:
+        if not presence or not pos_data:
             continue
 
         visibility = pos_data.get("visibility", "on")
@@ -466,9 +487,7 @@ async def load_friend_ids(user_id: uuid.UUID, db: AsyncSession) -> set[uuid.UUID
     return friend_ids
 
 
-async def load_active_convoy(
-    user_id: uuid.UUID, db: AsyncSession
-) -> uuid.UUID | None:
+async def load_active_convoy(user_id: uuid.UUID, db: AsyncSession) -> uuid.UUID | None:
     """Get the user's active convoy ID, if any."""
     result = await db.execute(
         select(ConvoyMember.convoy_id)

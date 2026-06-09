@@ -98,6 +98,8 @@ async def _pubsub_loop() -> None:
 
     Uses a dedicated Redis connection with no socket timeout so the
     listener can block indefinitely waiting for messages.
+
+    Automatically reconnects with exponential backoff on connection failures.
     """
     from backend.realtime.manager import manager
 
@@ -105,34 +107,55 @@ async def _pubsub_loop() -> None:
         logger.error("Pub/sub Redis client not initialized.")
         return
 
-    pubsub = _pubsub_redis.pubsub()
+    backoff = 1  # Initial backoff in seconds
+    max_backoff = 60  # Maximum backoff
 
-    try:
-        await pubsub.psubscribe("location:*", "convoy:*")
-        logger.info("Subscribed to Redis patterns: location:*, convoy:*")
-
-        async for message in pubsub.listen():
-            if message["type"] != "pmessage":
-                continue
-
-            channel: str = message["channel"]
-            try:
-                data = json.loads(message["data"])
-            except (json.JSONDecodeError, TypeError):
-                continue
-
-            # Find local connections subscribed to this channel and forward
-            subscribers = manager.get_subscribers(channel)
-            if subscribers:
-                await manager.broadcast_to_users(subscribers, data)
-
-    except asyncio.CancelledError:
-        logger.info("Pub/sub listener cancelled.")
-    except Exception as e:
-        logger.error(f"Pub/sub listener error: {e}", exc_info=True)
-    finally:
+    while True:
+        pubsub = _pubsub_redis.pubsub()
         try:
-            await pubsub.punsubscribe("location:*", "convoy:*")
-            await pubsub.aclose()
-        except Exception:
-            pass
+            await pubsub.psubscribe("location:*", "convoy:*")
+            logger.info("Subscribed to Redis patterns: location:*, convoy:*")
+            backoff = 1  # Reset backoff on successful connection
+
+            async for message in pubsub.listen():
+                if message["type"] != "pmessage":
+                    continue
+
+                channel: str = message["channel"]
+                try:
+                    data = json.loads(message["data"])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+                # Find local connections subscribed to this channel and forward
+                subscribers = manager.get_subscribers(channel)
+                if subscribers:
+                    await manager.broadcast_to_users(subscribers, data)
+
+        except asyncio.CancelledError:
+            # Graceful shutdown — exit the loop entirely
+            logger.info("Pub/sub listener cancelled.")
+            try:
+                await pubsub.punsubscribe("location:*", "convoy:*")
+                await pubsub.aclose()
+            except Exception:
+                pass
+            return
+
+        except Exception as e:
+            logger.error(
+                f"Pub/sub listener error, reconnecting in {backoff}s: {e}",
+                exc_info=True,
+            )
+            try:
+                await pubsub.punsubscribe("location:*", "convoy:*")
+                await pubsub.aclose()
+            except Exception:
+                pass
+
+            # Exponential backoff before reconnect
+            try:
+                await asyncio.sleep(backoff)
+            except asyncio.CancelledError:
+                return
+            backoff = min(backoff * 2, max_backoff)

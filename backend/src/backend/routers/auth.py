@@ -13,7 +13,6 @@ from backend.auth import (
     hash_password,
     hash_refresh_token,
     verify_password,
-    verify_refresh_token,
 )
 from backend.config import settings
 from backend.database import get_db
@@ -161,21 +160,16 @@ async def refresh(
     This implements token rotation — the old refresh token is revoked
     and a new one is issued.
     """
-    # Find all non-revoked, non-expired refresh tokens
+    # Direct lookup by SHA-256 hash — O(1) indexed query
+    token_hash = hash_refresh_token(body.refresh_token)
     result = await db.execute(
         select(RefreshToken).where(
+            RefreshToken.token_hash == token_hash,
             RefreshToken.revoked.is_(False),
             RefreshToken.expires_at > datetime.now(UTC),
         )
     )
-    tokens = result.scalars().all()
-
-    # Find matching token by verifying against stored hashes
-    matched_token: RefreshToken | None = None
-    for token_record in tokens:
-        if verify_refresh_token(body.refresh_token, token_record.token_hash):
-            matched_token = token_record
-            break
+    matched_token = result.scalar_one_or_none()
 
     if matched_token is None:
         raise HTTPException(
@@ -223,17 +217,18 @@ async def logout(
     current_user: User = Depends(get_current_user),
 ) -> MessageResponse:
     """Revoke the provided refresh token (sign out)."""
+    # Direct lookup by hash — O(1) instead of iterating all user tokens
+    token_hash = hash_refresh_token(body.refresh_token)
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.user_id == current_user.id,
+            RefreshToken.token_hash == token_hash,
             RefreshToken.revoked.is_(False),
         )
     )
-    tokens = result.scalars().all()
+    token_record = result.scalar_one_or_none()
 
-    for token_record in tokens:
-        if verify_refresh_token(body.refresh_token, token_record.token_hash):
-            token_record.revoked = True
-            break
+    if token_record is not None:
+        token_record.revoked = True
 
     return MessageResponse(message="Logged out successfully")
