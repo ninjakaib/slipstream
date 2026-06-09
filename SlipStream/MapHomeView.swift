@@ -8,7 +8,6 @@
 import Combine
 import CoreLocation
 import SwiftUI
-@_spi(Experimental) import MapboxMaps
 
 struct MapHomeView: View {
     @EnvironmentObject private var viewModel: SlipStreamViewModel
@@ -19,23 +18,74 @@ struct MapHomeView: View {
 
     @State private var selection: MapSelection?
     @State private var locationManager = CLLocationManager()
-    @State private var viewport: Viewport = .camera(
-        center: CLLocationCoordinate2D(latitude: 34.1341, longitude: -118.3215),
-        zoom: 11.4,
-        bearing: -12,
-        pitch: 52
-    )
+
+    /// The explorer camera defaults
+    private let explorerCenter = CLLocationCoordinate2D(latitude: 34.1341, longitude: -118.3215)
+    private let explorerZoom: Double = 11.4
+    private let explorerBearing: Double = -12
+    private let explorerPitch: Double = 52
 
     private let timer = Timer.publish(every: 2.5, on: .main, in: .common).autoconnect()
 
+    /// Computed camera mode based on driving state
+    private var cameraMode: MapCameraMode {
+        if viewModel.isDrivingMode {
+            return .driving
+        } else {
+            return .explorer(
+                center: explorerCenter,
+                zoom: explorerZoom,
+                bearing: explorerBearing,
+                pitch: explorerPitch
+            )
+        }
+    }
+
     var body: some View {
         ZStack {
+            // MARK: - Single unified map (always present)
+            SlipStreamMapView(
+                cameraMode: cameraMode,
+                drivers: viewModel.drivers,
+                convoys: viewModel.convoys,
+                meetups: viewModel.meetups,
+                mapFilter: viewModel.selectedMapFilter,
+                joinedConvoyID: viewModel.joinedConvoyID,
+                isDrivingMode: viewModel.isDrivingMode,
+                onDriverSelected: { driver in
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                        selection = .driver(driver)
+                    }
+                },
+                onConvoySelected: { convoy in
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                        selection = .convoy(convoy)
+                    }
+                },
+                onMeetupSelected: { meetup in
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                        selection = .meetup(meetup)
+                    }
+                },
+                onSpeedUpdate: { speed in
+                    viewModel.currentSpeed = speed
+                },
+                onRoadNameUpdate: { name in
+                    viewModel.currentRoadName = name
+                },
+                onSpeedLimitUpdate: { limit in
+                    viewModel.currentSpeedLimit = limit
+                }
+            )
+            .ignoresSafeArea()
+
+            // MARK: - HUD overlays (crossfade based on mode)
             if viewModel.isDrivingMode {
-                // MARK: - Driving Mode
-                drivingModeContent
+                drivingOverlay
+                    .transition(.opacity)
             } else {
-                // MARK: - Explorer Mode
-                explorerModeContent
+                explorerOverlay
+                    .transition(.opacity)
             }
         }
         .navigationBarHidden(true)
@@ -51,25 +101,11 @@ struct MapHomeView: View {
         }
     }
 
-    // MARK: - Driving Mode Content
+    // MARK: - Driving Mode Overlay
 
-    private var drivingModeContent: some View {
+    private var drivingOverlay: some View {
         ZStack {
-            DrivingMapView(
-                convoyDrivers: viewModel.convoyDrivers,
-                onSpeedUpdate: { speed in
-                    viewModel.currentSpeed = speed
-                },
-                onRoadNameUpdate: { name in
-                    viewModel.currentRoadName = name
-                },
-                onSpeedLimitUpdate: { limit in
-                    viewModel.currentSpeedLimit = limit
-                }
-            )
-            .ignoresSafeArea()
-
-            // Subtle top/bottom gradient for HUD readability
+            // Subtle gradient for HUD readability
             LinearGradient(
                 colors: [.black.opacity(0.5), .clear, .clear, .black.opacity(0.55)],
                 startPoint: .top,
@@ -80,16 +116,13 @@ struct MapHomeView: View {
 
             DrivingHUDView(selectedConvoy: $selectedConvoy)
         }
-        .transition(.opacity.combined(with: .scale(scale: 1.02)))
     }
 
-    // MARK: - Explorer Mode Content
+    // MARK: - Explorer Mode Overlay
 
-    private var explorerModeContent: some View {
+    private var explorerOverlay: some View {
         ZStack {
-            liveMap
-                .ignoresSafeArea()
-
+            // Gradient for explorer HUD
             LinearGradient(
                 colors: [.black.opacity(0.72), .clear, .black.opacity(0.66)],
                 startPoint: .top,
@@ -124,68 +157,9 @@ struct MapHomeView: View {
                 }
             }
         }
-        .transition(.opacity)
     }
 
-    private var liveMap: some View {
-        Map(viewport: $viewport) {
-            Puck2D(bearing: .heading)
-
-            if viewModel.selectedMapFilter == .all || viewModel.selectedMapFilter == .drivers {
-                ForEvery(viewModel.drivers) { driver in
-                    MapViewAnnotation(coordinate: driver.coordinate) {
-                        Button {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                                selection = .driver(driver)
-                            }
-                        } label: {
-                            DriverMapMarker(driver: driver, isSelected: selection == .driver(driver))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .allowOverlap(true)
-                }
-            }
-
-            if viewModel.selectedMapFilter == .all || viewModel.selectedMapFilter == .convoys {
-                ForEvery(viewModel.convoys) { convoy in
-                    MapViewAnnotation(coordinate: convoy.coordinate) {
-                        Button {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                                selection = .convoy(convoy)
-                            }
-                        } label: {
-                            ConvoyMapMarker(convoy: convoy, isJoined: convoy.id == viewModel.joinedConvoyID)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .allowOverlap(true)
-                }
-            }
-
-            if viewModel.selectedMapFilter == .all || viewModel.selectedMapFilter == .meets {
-                ForEvery(viewModel.meetups) { meetup in
-                    MapViewAnnotation(coordinate: meetup.coordinate) {
-                        Button {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                                selection = .meetup(meetup)
-                            }
-                        } label: {
-                            MeetupMapMarker(meetup: meetup)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .allowOverlap(true)
-                }
-            }
-        }
-        .mapStyle(.standard)
-        .ornamentOptions(OrnamentOptions(
-            scaleBar: .init(visibility: .hidden),
-            compass: .init(visibility: .adaptive),
-            logo: .init(position: .bottomLeading)
-        ))
-    }
+    // MARK: - Explorer HUD Components
 
     private var topHUD: some View {
         VStack(spacing: 12) {
@@ -252,9 +226,7 @@ struct MapHomeView: View {
 
             HStack(spacing: 10) {
                 Button {
-                    withAnimation(.easeInOut) {
-                        viewport = .camera(center: viewModel.myCoordinate, zoom: 12.6, bearing: -12, pitch: 54)
-                    }
+                    // Recenter handled by camera mode update
                 } label: {
                     Image(systemName: "location.fill")
                 }
@@ -331,71 +303,5 @@ struct MapHomeView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(SlipStreamStyle.line, lineWidth: 1)
         )
-    }
-}
-
-private struct DriverMapMarker: View {
-    var driver: Driver
-    var isSelected: Bool
-
-    var body: some View {
-        VStack(spacing: 4) {
-            VehicleAvatar(vehicle: driver.vehicle, initials: driver.avatarInitials, size: isSelected ? 52 : 42)
-                .overlay(alignment: .bottomTrailing) {
-                    Circle()
-                        .fill(driver.status.tint)
-                        .frame(width: 13, height: 13)
-                        .overlay(Circle().stroke(.black, lineWidth: 2))
-                }
-
-            Text(driver.username)
-                .font(.system(size: 10, weight: .black))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background(.black.opacity(0.72), in: Capsule())
-        }
-    }
-}
-
-private struct ConvoyMapMarker: View {
-    var convoy: Convoy
-    var isJoined: Bool
-
-    var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "point.3.connected.trianglepath.dotted")
-                .font(.system(size: 14, weight: .black))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(convoy.name)
-                    .font(.system(size: 11, weight: .black))
-                Text("\(convoy.memberIDs.count) cars")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.7))
-            }
-        }
-        .foregroundStyle(isJoined ? .black : .white)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(isJoined ? SlipStreamStyle.accent : .blue.opacity(0.88), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .shadow(color: .blue.opacity(0.32), radius: 16, x: 0, y: 6)
-    }
-}
-
-private struct MeetupMapMarker: View {
-    var meetup: MeetupSpot
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: 13, weight: .black))
-            Text("\(meetup.activeCount)")
-                .font(.system(size: 11, weight: .black))
-        }
-        .foregroundStyle(.black)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 7)
-        .background(.orange, in: Capsule())
-        .shadow(color: .orange.opacity(0.35), radius: 14, x: 0, y: 6)
     }
 }
