@@ -350,7 +350,7 @@ class ConvoyRoute(Base):
     destination_point = mapped_column(
         Geography(geometry_type="POINT", srid=4326), nullable=False
     )
-    waypoints: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    waypoints: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     route_geometry = mapped_column(
         Geography(geometry_type="LINESTRING", srid=4326), nullable=True
     )

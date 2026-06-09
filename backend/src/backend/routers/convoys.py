@@ -3,6 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
+from geoalchemy2.functions import ST_X, ST_Y
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
@@ -93,18 +94,29 @@ class KickRequest(BaseModel):
     user_id: str
 
 
+class Waypoint(BaseModel):
+    """A single waypoint along a route."""
+
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    name: str | None = None
+    order: int | None = None
+
+
 class SetRouteRequest(BaseModel):
     destination_name: str = Field(min_length=1, max_length=200)
     destination_lat: float = Field(ge=-90, le=90)
     destination_lng: float = Field(ge=-180, le=180)
-    waypoints: list[dict] | None = None
+    waypoints: list[Waypoint] | None = None
 
 
 class RouteResponse(BaseModel):
     id: str
     destination_name: str
+    destination_lat: float
+    destination_lng: float
     set_by_username: str
-    waypoints: list[dict] | None = None
+    waypoints: list[Waypoint] | None = None
     is_active: bool
     created_at: str
 
@@ -135,9 +147,7 @@ class MessageResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-async def _get_convoy_or_404(
-    convoy_id: uuid.UUID, db: AsyncSession
-) -> Convoy:
+async def _get_convoy_or_404(convoy_id: uuid.UUID, db: AsyncSession) -> Convoy:
     """Fetch a convoy or raise 404."""
     result = await db.execute(select(Convoy).where(Convoy.id == convoy_id))
     convoy = result.scalar_one_or_none()
@@ -192,7 +202,10 @@ async def _are_friends(user_a: uuid.UUID, user_b: uuid.UUID, db: AsyncSession) -
 
 
 async def _add_system_message(
-    convoy_id: uuid.UUID, content: str, db: AsyncSession, message_type: MessageType = MessageType.SYSTEM
+    convoy_id: uuid.UUID,
+    content: str,
+    db: AsyncSession,
+    message_type: MessageType = MessageType.SYSTEM,
 ) -> None:
     """Insert a system message into the convoy chat."""
     msg = ConvoyMessage(
@@ -204,7 +217,9 @@ async def _add_system_message(
     db.add(msg)
 
 
-async def _build_convoy_response(convoy: Convoy, db: AsyncSession, include_members: bool = True) -> ConvoyResponse:
+async def _build_convoy_response(
+    convoy: Convoy, db: AsyncSession, include_members: bool = True
+) -> ConvoyResponse:
     """Build a full convoy response with member details."""
     result = await db.execute(
         select(ConvoyMember)
@@ -276,7 +291,9 @@ async def create_convoy(
     # Build destination point if coordinates provided
     destination_point = None
     if body.destination_lat is not None and body.destination_lng is not None:
-        destination_point = f"SRID=4326;POINT({body.destination_lng} {body.destination_lat})"
+        destination_point = (
+            f"SRID=4326;POINT({body.destination_lng} {body.destination_lat})"
+        )
 
     convoy = Convoy(
         name=body.name,
@@ -297,7 +314,9 @@ async def create_convoy(
     )
     db.add(member)
 
-    await _add_system_message(convoy.id, f"{current_user.username} created the convoy.", db)
+    await _add_system_message(
+        convoy.id, f"{current_user.username} created the convoy.", db
+    )
     await db.flush()
 
     return await _build_convoy_response(convoy, db)
@@ -450,7 +469,9 @@ async def join_convoy(
     )
     db.add(member)
 
-    await _add_system_message(convoy_id, f"{current_user.username} joined the convoy.", db)
+    await _add_system_message(
+        convoy_id, f"{current_user.username} joined the convoy.", db
+    )
     await db.flush()
 
     return await _build_convoy_response(convoy, db)
@@ -553,12 +574,16 @@ async def accept_join_request(
     result = await db.execute(select(User).where(User.id == join_request.user_id))
     joined_user = result.scalar_one()
 
-    await _add_system_message(convoy_id, f"{joined_user.username} joined the convoy.", db)
+    await _add_system_message(
+        convoy_id, f"{joined_user.username} joined the convoy.", db
+    )
 
     return MessageResponse(message="Join request accepted")
 
 
-@router.post("/{convoy_id}/request/{request_id}/decline", response_model=MessageResponse)
+@router.post(
+    "/{convoy_id}/request/{request_id}/decline", response_model=MessageResponse
+)
 async def decline_join_request(
     convoy_id: uuid.UUID,
     request_id: uuid.UUID,
@@ -605,7 +630,9 @@ async def leave_convoy(
     member = await _require_membership(convoy_id, current_user.id, db)
 
     await db.delete(member)
-    await _add_system_message(convoy_id, f"{current_user.username} left the convoy.", db)
+    await _add_system_message(
+        convoy_id, f"{current_user.username} left the convoy.", db
+    )
 
     # If leader leaves, end the convoy
     if convoy.leader_id == current_user.id:
@@ -706,7 +733,9 @@ async def kick_member(
     kicked_user = result.scalar_one()
 
     await db.delete(member)
-    await _add_system_message(convoy_id, f"{kicked_user.username} was removed from the convoy.", db)
+    await _add_system_message(
+        convoy_id, f"{kicked_user.username} was removed from the convoy.", db
+    )
 
     return MessageResponse(message="Member kicked")
 
@@ -755,7 +784,11 @@ async def get_messages(
     ]
 
 
-@router.post("/{convoy_id}/messages", response_model=ConvoyMessageOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{convoy_id}/messages",
+    response_model=ConvoyMessageOut,
+    status_code=status.HTTP_201_CREATED,
+)
 async def send_message(
     convoy_id: uuid.UUID,
     body: SendMessageRequest,
@@ -791,7 +824,11 @@ async def send_message(
     )
 
 
-@router.post("/{convoy_id}/quick-action", response_model=ConvoyMessageOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{convoy_id}/quick-action",
+    response_model=ConvoyMessageOut,
+    status_code=status.HTTP_201_CREATED,
+)
 async def send_quick_action(
     convoy_id: uuid.UUID,
     body: QuickActionRequest,
@@ -841,7 +878,11 @@ async def send_quick_action(
 # ---------------------------------------------------------------------------
 
 
-@router.post("/{convoy_id}/route", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{convoy_id}/route",
+    response_model=RouteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def set_route(
     convoy_id: uuid.UUID,
     body: SetRouteRequest,
@@ -869,14 +910,18 @@ async def set_route(
         old_route.is_active = False
 
     # Create new route
-    destination_point = f"SRID=4326;POINT({body.destination_lng} {body.destination_lat})"
+    destination_point = (
+        f"SRID=4326;POINT({body.destination_lng} {body.destination_lat})"
+    )
 
     route = ConvoyRoute(
         convoy_id=convoy_id,
         set_by_user_id=current_user.id,
         destination_name=body.destination_name,
         destination_point=destination_point,
-        waypoints=body.waypoints,
+        waypoints=[wp.model_dump() for wp in body.waypoints]
+        if body.waypoints
+        else None,
         is_active=True,
     )
     db.add(route)
@@ -899,8 +944,12 @@ async def set_route(
     return RouteResponse(
         id=str(route.id),
         destination_name=route.destination_name,
+        destination_lat=body.destination_lat,
+        destination_lng=body.destination_lng,
         set_by_username=current_user.username,
-        waypoints=route.waypoints,
+        waypoints=[Waypoint(**wp) for wp in route.waypoints]
+        if route.waypoints
+        else None,
         is_active=route.is_active,
         created_at=route.created_at.isoformat(),
     )
@@ -917,7 +966,11 @@ async def get_active_route(
     await _require_membership(convoy_id, current_user.id, db)
 
     result = await db.execute(
-        select(ConvoyRoute)
+        select(
+            ConvoyRoute,
+            ST_Y(ConvoyRoute.destination_point).label("dest_lat"),
+            ST_X(ConvoyRoute.destination_point).label("dest_lng"),
+        )
         .where(
             ConvoyRoute.convoy_id == convoy_id,
             ConvoyRoute.is_active.is_(True),
@@ -926,16 +979,22 @@ async def get_active_route(
         .order_by(ConvoyRoute.created_at.desc())
         .limit(1)
     )
-    route = result.scalar_one_or_none()
+    row = result.one_or_none()
 
-    if route is None:
+    if row is None:
         return None
+
+    route, dest_lat, dest_lng = row
 
     return RouteResponse(
         id=str(route.id),
         destination_name=route.destination_name,
+        destination_lat=dest_lat,
+        destination_lng=dest_lng,
         set_by_username=route.set_by.username,
-        waypoints=route.waypoints,
+        waypoints=[Waypoint(**wp) for wp in route.waypoints]
+        if route.waypoints
+        else None,
         is_active=route.is_active,
         created_at=route.created_at.isoformat(),
     )
