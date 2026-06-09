@@ -21,6 +21,7 @@ from backend.models import (
     User,
     VisibilityMode,
 )
+from backend.redis import get_redis
 
 router = APIRouter(prefix="/discovery", tags=["discovery"])
 
@@ -45,9 +46,14 @@ class NearbyDriverOut(BaseModel):
     avatar_url: str | None = None
     active_car: DiscoveryCarInfo | None = None
     is_friend: bool
-    # Position will come from Redis in the real implementation.
-    # For now, this endpoint returns the list of visible users
-    # and the WebSocket handles live positions.
+    # Live position data from Redis
+    lat: float | None = None
+    lng: float | None = None
+    heading: float | None = None
+    speed: float | None = None
+    status: str | None = None
+    road_name: str | None = None
+    distance_miles: float | None = None
 
 
 class NearbyConvoyOut(BaseModel):
@@ -96,6 +102,8 @@ async def _get_friend_ids(user_id: uuid.UUID, db: AsyncSession) -> set[uuid.UUID
 
 @router.get("/nearby", response_model=list[NearbyDriverOut])
 async def get_nearby_drivers(
+    lat: float = Query(ge=-90, le=90),
+    lng: float = Query(ge=-180, le=180),
     status_filter: str | None = Query(default=None, alias="status"),
     make_filter: str | None = Query(default=None, alias="make"),
     friends_only: bool = Query(default=False),
@@ -103,42 +111,99 @@ async def get_nearby_drivers(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[NearbyDriverOut]:
-    """Get nearby visible drivers.
+    """Get nearby visible drivers within the user's discovery radius.
 
-    In the full implementation, this will use Redis GEO to find users
-    within the caller's discovery radius. For now, it returns all users
-    that would be visible based on visibility/friendship rules.
-
-    Live positions are delivered via WebSocket, not this endpoint.
-    This endpoint provides the user metadata for rendering markers.
+    Uses Redis GEOSEARCH for spatial lookup, then enriches with user
+    metadata from Postgres. Applies visibility and friendship filtering.
     """
     friend_ids = await _get_friend_ids(current_user.id, db)
+    radius = current_user.discovery_radius_miles
 
-    # Base query: all users except self
-    query = (
-        select(User)
-        .where(User.id != current_user.id)
-        .options(selectinload(User.cars))
-    )
+    # Spatial query via Redis GEO
+    r = get_redis()
+    try:
+        results = await r.geosearch(
+            "positions:live",
+            longitude=lng,
+            latitude=lat,
+            radius=radius,
+            unit="mi",
+            sort="ASC",
+            count=200,
+            withcoord=True,
+            withdist=True,
+        )
+    except Exception:
+        # If Redis is down, fall back to returning empty (graceful degradation)
+        return []
 
-    # Apply friends_only filter
-    if friends_only:
-        if not friend_ids:
-            return []
-        query = query.where(User.id.in_(friend_ids))
-
-    result = await db.execute(query.limit(limit))
-    users = result.scalars().all()
-
-    # Filter by visibility rules
-    visible_drivers: list[NearbyDriverOut] = []
-    for user in users:
-        # Visibility check
-        if user.visibility == VisibilityMode.GHOST:
+    # results is a list of (member, distance, (lng, lat)) tuples
+    # Filter to exclude self
+    user_id_str = str(current_user.id)
+    nearby_entries: list[tuple[str, float, tuple[float, float]]] = []
+    for entry in results:
+        member_id = entry[0] if isinstance(entry, (list, tuple)) else entry
+        if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+            member_id, dist = entry[0], entry[1]
+            coord = entry[2] if len(entry) > 2 else None
+        else:
             continue
-        if user.visibility == VisibilityMode.FRIENDS_ONLY:
-            if user.id not in friend_ids:
-                continue
+        if member_id == user_id_str:
+            continue
+        nearby_entries.append((member_id, dist, coord))
+
+    if not nearby_entries:
+        return []
+
+    # Get position metadata and apply visibility filtering
+    visible_entries: list[tuple[str, float, dict]] = []
+    for member_id, dist, coord in nearby_entries:
+        pos_data = await r.hgetall(f"pos:{member_id}")
+        if not pos_data:
+            continue
+
+        # Visibility check
+        visibility = pos_data.get("visibility", "on")
+        try:
+            target_uuid = uuid.UUID(member_id)
+        except ValueError:
+            continue
+
+        if visibility == "ghost":
+            continue
+        if visibility == "friends_only" and target_uuid not in friend_ids:
+            continue
+
+        # Status filter
+        if status_filter and pos_data.get("status") != status_filter:
+            continue
+
+        # Friends only filter
+        if friends_only and target_uuid not in friend_ids:
+            continue
+
+        visible_entries.append((member_id, dist, pos_data))
+
+    if not visible_entries:
+        return []
+
+    # Load user profiles from Postgres
+    visible_uuids = [uuid.UUID(e[0]) for e in visible_entries]
+    result = await db.execute(
+        select(User)
+        .where(User.id.in_(visible_uuids))
+        .options(selectinload(User.cars))
+        .limit(limit)
+    )
+    users_by_id = {u.id: u for u in result.scalars().all()}
+
+    # Build response
+    drivers: list[NearbyDriverOut] = []
+    for member_id, dist, pos_data in visible_entries:
+        target_uuid = uuid.UUID(member_id)
+        user = users_by_id.get(target_uuid)
+        if user is None:
+            continue
 
         # Get active car
         active_car = next((c for c in user.cars if c.is_active), None)
@@ -153,24 +218,34 @@ async def get_nearby_drivers(
             )
 
         # Apply make filter
-        if make_filter and car_info:
-            if car_info.make.lower() != make_filter.lower():
+        if make_filter:
+            if car_info and car_info.make.lower() != make_filter.lower():
                 continue
-        elif make_filter and not car_info:
-            continue
+            elif not car_info:
+                continue
 
-        visible_drivers.append(
+        drivers.append(
             NearbyDriverOut(
-                user_id=str(user.id),
+                user_id=member_id,
                 username=user.username,
                 display_name=user.display_name,
                 avatar_url=user.avatar_url,
                 active_car=car_info,
-                is_friend=user.id in friend_ids,
+                is_friend=target_uuid in friend_ids,
+                lat=float(pos_data.get("lat", 0)),
+                lng=float(pos_data.get("lng", 0)),
+                heading=float(pos_data.get("heading", 0)),
+                speed=float(pos_data.get("speed", 0)),
+                status=pos_data.get("status"),
+                road_name=pos_data.get("road_name"),
+                distance_miles=round(dist, 2),
             )
         )
 
-    return visible_drivers
+        if len(drivers) >= limit:
+            break
+
+    return drivers
 
 
 @router.get("/convoys", response_model=list[NearbyConvoyOut])

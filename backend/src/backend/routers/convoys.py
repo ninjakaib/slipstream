@@ -28,6 +28,11 @@ from backend.models import (
     MessageType,
     User,
 )
+from backend.realtime.events import (
+    publish_convoy_chat,
+    publish_convoy_event,
+    publish_notification,
+)
 
 router = APIRouter(prefix="/convoys", tags=["convoys"])
 
@@ -319,6 +324,12 @@ async def create_convoy(
     )
     await db.flush()
 
+    # Add creator to Redis convoy member set
+    from backend.redis import get_redis
+
+    r = get_redis()
+    await r.sadd(f"convoy:{convoy.id}:members", str(current_user.id))
+
     return await _build_convoy_response(convoy, db)
 
 
@@ -401,6 +412,15 @@ async def end_convoy(
     for member in result.scalars().all():
         await db.delete(member)
 
+    # Publish convoy_ended event and clean up Redis
+    await publish_convoy_event(
+        convoy_id, "convoy_ended", {"ended_by": str(current_user.id)}
+    )
+    from backend.redis import get_redis
+
+    r = get_redis()
+    await r.delete(f"convoy:{convoy_id}:members")
+
     return MessageResponse(message="Convoy ended")
 
 
@@ -474,6 +494,17 @@ async def join_convoy(
     )
     await db.flush()
 
+    # Publish member_joined event + update Redis set
+    await publish_convoy_event(
+        convoy_id,
+        "member_joined",
+        {"user_id": str(current_user.id), "username": current_user.username},
+    )
+    from backend.redis import get_redis
+
+    r = get_redis()
+    await r.sadd(f"convoy:{convoy_id}:members", str(current_user.id))
+
     return await _build_convoy_response(convoy, db)
 
 
@@ -526,6 +557,15 @@ async def request_to_join(
     )
     db.add(join_request)
 
+    # Notify convoy leader of join request
+    await publish_notification(
+        target_user_id=convoy.leader_id,
+        notification_type="join_request",
+        from_user={"user_id": str(current_user.id), "username": current_user.username},
+        message=f"{current_user.username} wants to join your convoy",
+        extra_data={"convoy_id": str(convoy_id)},
+    )
+
     return MessageResponse(message="Join request sent")
 
 
@@ -577,6 +617,17 @@ async def accept_join_request(
     await _add_system_message(
         convoy_id, f"{joined_user.username} joined the convoy.", db
     )
+
+    # Publish member_joined event + update Redis set
+    await publish_convoy_event(
+        convoy_id,
+        "member_joined",
+        {"user_id": str(join_request.user_id), "username": joined_user.username},
+    )
+    from backend.redis import get_redis
+
+    r = get_redis()
+    await r.sadd(f"convoy:{convoy_id}:members", str(join_request.user_id))
 
     return MessageResponse(message="Join request accepted")
 
@@ -634,12 +685,28 @@ async def leave_convoy(
         convoy_id, f"{current_user.username} left the convoy.", db
     )
 
+    # Update Redis set
+    from backend.redis import get_redis
+
+    r = get_redis()
+    await r.srem(f"convoy:{convoy_id}:members", str(current_user.id))
+
     # If leader leaves, end the convoy
     if convoy.leader_id == current_user.id:
         convoy.status = ConvoyStatus.ENDED
         convoy.ended_at = datetime.now(UTC)
         await _add_system_message(convoy_id, "Convoy ended (leader left).", db)
+        await publish_convoy_event(
+            convoy_id, "convoy_ended", {"ended_by": str(current_user.id)}
+        )
+        await r.delete(f"convoy:{convoy_id}:members")
     else:
+        # Publish member_left event
+        await publish_convoy_event(
+            convoy_id,
+            "member_left",
+            {"user_id": str(current_user.id), "username": current_user.username},
+        )
         # Check if convoy is now empty
         result = await db.execute(
             select(ConvoyMember).where(ConvoyMember.convoy_id == convoy_id)
@@ -648,6 +715,10 @@ async def leave_convoy(
         if not remaining:
             convoy.status = ConvoyStatus.ENDED
             convoy.ended_at = datetime.now(UTC)
+            await publish_convoy_event(
+                convoy_id, "convoy_ended", {"ended_by": "system"}
+            )
+            await r.delete(f"convoy:{convoy_id}:members")
 
     return MessageResponse(message="Left convoy")
 
@@ -694,6 +765,15 @@ async def invite_to_convoy(
     )
     db.add(invite)
 
+    # Notify invited user
+    await publish_notification(
+        target_user_id=target_id,
+        notification_type="convoy_invite",
+        from_user={"user_id": str(current_user.id), "username": current_user.username},
+        message=f"{current_user.username} invited you to {convoy.name}",
+        extra_data={"convoy_id": str(convoy_id), "convoy_name": convoy.name},
+    )
+
     return MessageResponse(message="Invite sent")
 
 
@@ -735,6 +815,26 @@ async def kick_member(
     await db.delete(member)
     await _add_system_message(
         convoy_id, f"{kicked_user.username} was removed from the convoy.", db
+    )
+
+    # Publish member_kicked event + update Redis set
+    await publish_convoy_event(
+        convoy_id,
+        "member_kicked",
+        {"user_id": str(target_id), "username": kicked_user.username},
+    )
+    from backend.redis import get_redis
+
+    r = get_redis()
+    await r.srem(f"convoy:{convoy_id}:members", str(target_id))
+
+    # Notify kicked user
+    await publish_notification(
+        target_user_id=target_id,
+        notification_type="convoy_kicked",
+        from_user={"user_id": str(current_user.id), "username": current_user.username},
+        message=f"You were removed from {convoy.name}",
+        extra_data={"convoy_id": str(convoy_id)},
     )
 
     return MessageResponse(message="Member kicked")
@@ -814,6 +914,16 @@ async def send_message(
     db.add(msg)
     await db.flush()
 
+    # Publish to convoy channel for real-time delivery
+    await publish_convoy_chat(
+        convoy_id=convoy_id,
+        message_id=msg.id,
+        sender_id=current_user.id,
+        sender_username=current_user.username,
+        content=body.content,
+        message_type="text",
+    )
+
     return ConvoyMessageOut(
         id=str(msg.id),
         sender_id=str(current_user.id),
@@ -862,6 +972,19 @@ async def send_quick_action(
     )
     db.add(msg)
     await db.flush()
+
+    # Publish quick action to convoy channel
+    await publish_convoy_event(
+        convoy_id,
+        "quick_action",
+        {
+            "user_id": str(current_user.id),
+            "username": current_user.username,
+            "action": body.action,
+            "label": action_labels[body.action],
+            "message_id": str(msg.id),
+        },
+    )
 
     return ConvoyMessageOut(
         id=str(msg.id),
@@ -940,6 +1063,19 @@ async def set_route(
         db,
     )
     await db.flush()
+
+    # Publish route_set event
+    await publish_convoy_event(
+        convoy_id,
+        "route_set",
+        {
+            "user_id": str(current_user.id),
+            "username": current_user.username,
+            "destination_name": body.destination_name,
+            "destination_lat": body.destination_lat,
+            "destination_lng": body.destination_lng,
+        },
+    )
 
     return RouteResponse(
         id=str(route.id),
