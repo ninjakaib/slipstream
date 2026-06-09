@@ -92,11 +92,11 @@ class ConvoyListItem(BaseModel):
 
 
 class InviteRequest(BaseModel):
-    user_id: str
+    user_id: uuid.UUID
 
 
 class KickRequest(BaseModel):
-    user_id: str
+    user_id: uuid.UUID
 
 
 class Waypoint(BaseModel):
@@ -730,7 +730,7 @@ async def invite_to_convoy(
             detail="Convoy has ended",
         )
 
-    target_id = uuid.UUID(body.user_id)
+    target_id = body.user_id
 
     # Check target exists
     result = await db.execute(select(User).where(User.id == target_id))
@@ -783,7 +783,7 @@ async def kick_member(
             detail="Only the convoy leader can kick members",
         )
 
-    target_id = uuid.UUID(body.user_id)
+    target_id = body.user_id
 
     if target_id == current_user.id:
         raise HTTPException(
@@ -839,7 +839,9 @@ async def kick_member(
 async def get_messages(
     convoy_id: uuid.UUID,
     limit: int = Query(default=50, ge=1, le=100),
-    before: str | None = None,
+    before: str | None = Query(
+        default=None, description="ISO 8601 timestamp for cursor-based pagination"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[ConvoyMessageOut]:
@@ -856,7 +858,14 @@ async def get_messages(
     )
 
     if before is not None:
-        query = query.where(ConvoyMessage.created_at < before)
+        try:
+            before_dt = datetime.fromisoformat(before)
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid 'before' timestamp. Use ISO 8601 format.",
+            )
+        query = query.where(ConvoyMessage.created_at < before_dt)
 
     result = await db.execute(query)
     messages = list(reversed(result.scalars().all()))

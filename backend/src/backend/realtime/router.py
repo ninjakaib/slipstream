@@ -103,6 +103,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     conn.friend_ids = friend_ids
     conn.convoy_id = convoy_id
     conn.subscribe_radius_miles = float(discovery_radius)
+    conn._visibility = visibility.value  # Cache for location_update handler
 
     logger.info(
         f"WebSocket connected: {username} ({user_id}) "

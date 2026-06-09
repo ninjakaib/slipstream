@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.database import get_db
 from backend.dependencies import get_current_user
-from backend.models import Car, Friendship, FriendshipStatus, User
+from backend.models import Friendship, FriendshipStatus, User
 from backend.realtime.events import publish_notification
 
 router = APIRouter(prefix="/friends", tags=["friends"])
@@ -52,11 +52,11 @@ class FriendRequestOut(BaseModel):
 
 
 class FriendRequestCreate(BaseModel):
-    user_id: str
+    user_id: uuid.UUID
 
 
 class FriendRequestAction(BaseModel):
-    request_id: str
+    request_id: uuid.UUID
 
 
 class MessageResponse(BaseModel):
@@ -128,9 +128,7 @@ async def list_friends(
 
     # Load friend profiles with cars
     result = await db.execute(
-        select(User)
-        .where(User.id.in_(friend_ids))
-        .options(selectinload(User.cars))
+        select(User).where(User.id.in_(friend_ids)).options(selectinload(User.cars))
     )
     friends = result.scalars().all()
 
@@ -159,9 +157,7 @@ async def list_friend_requests(
     # Load requester profiles
     requester_ids = [r.requester_id for r in requests]
     result = await db.execute(
-        select(User)
-        .where(User.id.in_(requester_ids))
-        .options(selectinload(User.cars))
+        select(User).where(User.id.in_(requester_ids)).options(selectinload(User.cars))
     )
     users_by_id = {u.id: u for u in result.scalars().all()}
 
@@ -181,14 +177,16 @@ async def list_friend_requests(
     return out
 
 
-@router.post("/request", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/request", response_model=MessageResponse, status_code=status.HTTP_201_CREATED
+)
 async def send_friend_request(
     body: FriendRequestCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     """Send a friend request to another user."""
-    target_id = uuid.UUID(body.user_id)
+    target_id = body.user_id
 
     if target_id == current_user.id:
         raise HTTPException(
@@ -228,7 +226,9 @@ async def send_friend_request(
             if existing.requester_id == target_id:
                 existing.status = FriendshipStatus.ACCEPTED
                 existing.accepted_at = datetime.now(UTC)
-                return MessageResponse(message="Friend request accepted (they already sent you one)")
+                return MessageResponse(
+                    message="Friend request accepted (they already sent you one)"
+                )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Friend request already pending",
@@ -260,7 +260,7 @@ async def accept_friend_request(
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     """Accept an incoming friend request."""
-    request_id = uuid.UUID(body.request_id)
+    request_id = body.request_id
 
     result = await db.execute(
         select(Friendship).where(
@@ -298,7 +298,7 @@ async def decline_friend_request(
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     """Decline an incoming friend request."""
-    request_id = uuid.UUID(body.request_id)
+    request_id = body.request_id
 
     result = await db.execute(
         select(Friendship).where(

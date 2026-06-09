@@ -20,11 +20,15 @@ async_session_factory = async_sessionmaker(
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Yield an async database session."""
+    """Yield an async database session.
+
+    Uses begin() to manage the transaction explicitly:
+    - Commits automatically on successful exit.
+    - Rolls back on exception.
+
+    This avoids issuing unnecessary COMMIT on read-only requests
+    while still being safe for write operations.
+    """
     async with async_session_factory() as session:
-        try:
+        async with session.begin():
             yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise

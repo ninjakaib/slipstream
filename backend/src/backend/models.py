@@ -333,6 +333,14 @@ class ConvoyMessage(Base):
     convoy: Mapped["Convoy"] = relationship(back_populates="messages")
     sender: Mapped["User | None"] = relationship()
 
+    __table_args__ = (
+        Index(
+            "ix_convoy_messages_convoy_created",
+            "convoy_id",
+            "created_at",
+        ),
+    )
+
 
 class ConvoyRoute(Base):
     __tablename__ = "convoy_routes"

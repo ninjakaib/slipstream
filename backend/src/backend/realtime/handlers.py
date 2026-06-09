@@ -64,12 +64,18 @@ async def handle_location_update(
     user_id_str = str(conn.user_id)
     now = int(time.time())
 
+    # Determine visibility from the connection's cached user state.
+    # This ensures visibility is always present in the hash, even if the
+    # hash was recreated after TTL expiry.
+    visibility = getattr(conn, "_visibility", "on")
+
     # Pipeline for atomic updates (no transaction needed — these are independent)
     async with r.pipeline(transaction=False) as pipe:
         # 1. Update GEO set (Redis GEO uses lng, lat order)
         pipe.geoadd("positions:live", (lng, lat, user_id_str))
 
-        # 2. Update position metadata hash
+        # 2. Update position metadata hash (includes visibility so it
+        #    survives hash recreation after TTL expiry)
         pipe.hset(
             f"pos:{user_id_str}",
             mapping={
@@ -79,6 +85,7 @@ async def handle_location_update(
                 "speed": str(speed),
                 "status": status,
                 "road_name": road_name,
+                "visibility": visibility,
                 "updated_at": str(now),
             },
         )

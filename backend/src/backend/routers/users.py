@@ -90,6 +90,11 @@ class MessageResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _escape_like(value: str) -> str:
+    """Escape LIKE/ILIKE special characters to prevent wildcard injection."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _get_active_car(user: User) -> CarSummary | None:
     """Extract the active car summary from a loaded user."""
     for car in user.cars:
@@ -202,10 +207,12 @@ async def search_users(
             detail="Query must be at least 2 characters",
         )
 
+    # Escape LIKE wildcards to prevent unintended matching on % or _
+    safe_query = _escape_like(q.lower())
     result = await db.execute(
         select(User)
         .where(
-            User.username.ilike(f"{q.lower()}%"),
+            User.username.ilike(f"{safe_query}%"),
             User.id != current_user.id,
         )
         .options(selectinload(User.cars))

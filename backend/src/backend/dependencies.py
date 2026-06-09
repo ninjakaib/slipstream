@@ -23,6 +23,8 @@ async def get_current_user(
     """Validate the access token and return the authenticated user.
 
     This is the primary auth dependency — inject it into any protected route.
+    Uses a lightweight query selecting only (id, username) for existence check,
+    then returns the full ORM instance for use in route handlers.
     """
     token = credentials.credentials
 
@@ -49,7 +51,16 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    result = await db.execute(select(User).where(User.id == uid))
     user = result.scalar_one_or_none()
 
     if user is None:

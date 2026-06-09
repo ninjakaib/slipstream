@@ -1,17 +1,17 @@
 """Discovery router — find nearby drivers and convoys."""
 
+import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.database import get_db
 from backend.dependencies import get_current_user
 from backend.models import (
-    Car,
     Convoy,
     ConvoyMember,
     ConvoyStatus,
@@ -19,9 +19,10 @@ from backend.models import (
     Friendship,
     FriendshipStatus,
     User,
-    VisibilityMode,
 )
 from backend.redis import get_redis
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/discovery", tags=["discovery"])
 
@@ -122,6 +123,7 @@ async def get_nearby_drivers(
     # Spatial query via Redis GEO
     r = get_redis()
     try:
+        # geosearch with withdist=True returns list of [name, distance] pairs
         results = await r.geosearch(
             "positions:live",
             longitude=lng,
@@ -130,35 +132,44 @@ async def get_nearby_drivers(
             unit="mi",
             sort="ASC",
             count=200,
-            withcoord=True,
             withdist=True,
         )
-    except Exception:
+    except Exception as e:
         # If Redis is down, fall back to returning empty (graceful degradation)
+        logger.warning(f"Redis GEOSEARCH failed in discovery: {e}")
         return []
 
-    # results is a list of (member, distance, (lng, lat)) tuples
-    # Filter to exclude self
+    # Parse geosearch results into (member_id, distance) pairs.
+    # With withdist=True the redis library returns: list of [name, dist_str]
     user_id_str = str(current_user.id)
-    nearby_entries: list[tuple[str, float, tuple[float, float]]] = []
+    nearby_entries: list[tuple[str, float]] = []
     for entry in results:
-        member_id = entry[0] if isinstance(entry, (list, tuple)) else entry
-        if isinstance(entry, (list, tuple)) and len(entry) >= 2:
-            member_id, dist = entry[0], entry[1]
-            coord = entry[2] if len(entry) > 2 else None
-        else:
+        try:
+            if isinstance(entry, (list, tuple)):
+                member_id = str(entry[0])
+                dist = float(entry[1])
+            else:
+                # Fallback: some redis versions return just member names
+                member_id = str(entry)
+                dist = 0.0
+        except (IndexError, ValueError, TypeError):
             continue
         if member_id == user_id_str:
             continue
-        nearby_entries.append((member_id, dist, coord))
+        nearby_entries.append((member_id, dist))
 
     if not nearby_entries:
         return []
 
-    # Get position metadata and apply visibility filtering
+    # Batch-fetch position metadata via pipeline (avoid N+1 Redis calls)
+    async with r.pipeline(transaction=False) as pipe:
+        for member_id, _ in nearby_entries:
+            pipe.hgetall(f"pos:{member_id}")
+        pos_results = await pipe.execute()
+
+    # Apply visibility filtering
     visible_entries: list[tuple[str, float, dict]] = []
-    for member_id, dist, coord in nearby_entries:
-        pos_data = await r.hgetall(f"pos:{member_id}")
+    for (member_id, dist), pos_data in zip(nearby_entries, pos_results):
         if not pos_data:
             continue
 
@@ -260,8 +271,17 @@ async def get_nearby_convoys(
     based on convoy member positions from Redis.
     For now, returns all non-ended public convoys.
     """
+    # Use a correlated subquery for member count to avoid N+1 queries
+    member_count_subq = (
+        select(func.count(ConvoyMember.id))
+        .where(ConvoyMember.convoy_id == Convoy.id)
+        .correlate(Convoy)
+        .scalar_subquery()
+        .label("member_count")
+    )
+
     result = await db.execute(
-        select(Convoy)
+        select(Convoy, member_count_subq)
         .where(
             Convoy.status.in_([ConvoyStatus.FORMING, ConvoyStatus.ACTIVE]),
             Convoy.visibility == ConvoyVisibility.PUBLIC,
@@ -270,27 +290,18 @@ async def get_nearby_convoys(
         .order_by(Convoy.created_at.desc())
         .limit(limit)
     )
-    convoys = result.scalars().all()
+    rows = result.all()
 
-    # Get member counts
-    out: list[NearbyConvoyOut] = []
-    for convoy in convoys:
-        member_result = await db.execute(
-            select(ConvoyMember).where(ConvoyMember.convoy_id == convoy.id)
+    return [
+        NearbyConvoyOut(
+            id=str(convoy.id),
+            name=convoy.name,
+            leader_username=convoy.leader.username,
+            visibility=convoy.visibility,
+            status=convoy.status,
+            destination_name=convoy.destination_name,
+            member_count=member_count,
+            created_at=convoy.created_at.isoformat(),
         )
-        member_count = len(member_result.scalars().all())
-
-        out.append(
-            NearbyConvoyOut(
-                id=str(convoy.id),
-                name=convoy.name,
-                leader_username=convoy.leader.username,
-                visibility=convoy.visibility,
-                status=convoy.status,
-                destination_name=convoy.destination_name,
-                member_count=member_count,
-                created_at=convoy.created_at.isoformat(),
-            )
-        )
-
-    return out
+        for convoy, member_count in rows
+    ]
