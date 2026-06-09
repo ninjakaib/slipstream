@@ -19,6 +19,10 @@ final class SlipStreamViewModel: ObservableObject {
     @Published var visibility: VisibilityMode = .exact
     @Published var selectedMapFilter: MapFilter = .all
     @Published var joinedConvoyID: Convoy.ID?
+    @Published var isDrivingMode: Bool = false
+    @Published var currentSpeed: Int = 0
+    @Published var currentRoadName: String = ""
+    @Published var currentSpeedLimit: Int? = nil
 
     let myCoordinate = CLLocationCoordinate2D(latitude: 34.1341, longitude: -118.3215)
     let myVehicle = Vehicle(
@@ -82,12 +86,41 @@ final class SlipStreamViewModel: ObservableObject {
         messages.append(ChatMessage(sender: "SlipStream", text: "\(convoy.name) is live.", timestamp: "Now", isSystem: true))
     }
 
+    func enterDrivingMode() {
+        isDrivingMode = true
+        myStatus = .driving
+    }
+
+    func exitDrivingMode() {
+        isDrivingMode = false
+        currentSpeed = 0
+        currentRoadName = ""
+        currentSpeedLimit = nil
+        myStatus = .available
+    }
+
+    /// Convoy members relevant for driving mode display
+    var convoyDrivers: [Driver] {
+        guard let joinedConvoyID else { return [] }
+        guard let convoy = convoys.first(where: { $0.id == joinedConvoyID }) else { return [] }
+        return drivers.filter { convoy.memberIDs.contains($0.id) }
+    }
+
     func tickDemoLocations() {
         for index in drivers.indices {
             guard drivers[index].status != .offline else { continue }
             let drift = Double(index + 1) * 0.00003
             drivers[index].coordinate.latitude += index.isMultiple(of: 2) ? drift : -drift
             drivers[index].coordinate.longitude += index.isMultiple(of: 2) ? -drift : drift
+        }
+
+        // Simulate driving telemetry when in driving mode
+        if isDrivingMode {
+            let speeds = [34, 37, 42, 45, 48, 52, 55, 47, 39, 44, 51, 58, 62, 56, 49]
+            currentSpeed = speeds[Int.random(in: 0..<speeds.count)]
+            currentSpeedLimit = 55
+            let roads = ["Angeles Crest Hwy", "Angeles Crest Hwy", "Angeles Crest Hwy", "CA-2", "Angeles Crest Hwy"]
+            currentRoadName = roads[Int.random(in: 0..<roads.count)]
         }
     }
 }

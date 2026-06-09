@@ -30,6 +30,63 @@ struct MapHomeView: View {
 
     var body: some View {
         ZStack {
+            if viewModel.isDrivingMode {
+                // MARK: - Driving Mode
+                drivingModeContent
+            } else {
+                // MARK: - Explorer Mode
+                explorerModeContent
+            }
+        }
+        .navigationBarHidden(true)
+        .onReceive(timer) { _ in
+            withAnimation(.linear(duration: 2.5)) {
+                viewModel.tickDemoLocations()
+            }
+        }
+        .onAppear {
+            if locationManager.authorizationStatus == .notDetermined {
+                locationManager.requestWhenInUseAuthorization()
+            }
+        }
+    }
+
+    // MARK: - Driving Mode Content
+
+    private var drivingModeContent: some View {
+        ZStack {
+            DrivingMapView(
+                convoyDrivers: viewModel.convoyDrivers,
+                onSpeedUpdate: { speed in
+                    viewModel.currentSpeed = speed
+                },
+                onRoadNameUpdate: { name in
+                    viewModel.currentRoadName = name
+                },
+                onSpeedLimitUpdate: { limit in
+                    viewModel.currentSpeedLimit = limit
+                }
+            )
+            .ignoresSafeArea()
+
+            // Subtle top/bottom gradient for HUD readability
+            LinearGradient(
+                colors: [.black.opacity(0.5), .clear, .clear, .black.opacity(0.55)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .allowsHitTesting(false)
+            .ignoresSafeArea()
+
+            DrivingHUDView(selectedConvoy: $selectedConvoy)
+        }
+        .transition(.opacity.combined(with: .scale(scale: 1.02)))
+    }
+
+    // MARK: - Explorer Mode Content
+
+    private var explorerModeContent: some View {
+        ZStack {
             liveMap
                 .ignoresSafeArea()
 
@@ -67,17 +124,7 @@ struct MapHomeView: View {
                 }
             }
         }
-        .navigationBarHidden(true)
-        .onReceive(timer) { _ in
-            withAnimation(.linear(duration: 2.5)) {
-                viewModel.tickDemoLocations()
-            }
-        }
-        .onAppear {
-            if locationManager.authorizationStatus == .notDetermined {
-                locationManager.requestWhenInUseAuthorization()
-            }
-        }
+        .transition(.opacity)
     }
 
     private var liveMap: some View {
@@ -214,9 +261,23 @@ struct MapHomeView: View {
                 .buttonStyle(HUDButtonStyle())
 
                 Button {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                        viewModel.enterDrivingMode()
+                    }
+                } label: {
+                    Label("Drive", systemImage: "steeringwheel")
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(.black)
+                        .frame(height: 44)
+                        .padding(.horizontal, 16)
+                        .background(SlipStreamStyle.accent, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                Button {
                     showingCreateConvoy = true
                 } label: {
-                    Label("Start Convoy", systemImage: "plus")
+                    Label("Convoy", systemImage: "plus")
                         .font(.system(size: 15, weight: .black))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
