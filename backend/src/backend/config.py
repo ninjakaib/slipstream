@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     app_name: str = "SlipStream"
     debug: bool = False
 
+    # Apple Sign In
+    apple_bundle_id: str = "com.slipstream.app"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
