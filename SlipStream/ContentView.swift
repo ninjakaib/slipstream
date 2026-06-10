@@ -28,25 +28,7 @@ struct ContentView: View {
                 WelcomeView()
 
             case .onboarding:
-                // Placeholder for onboarding (implemented in next plan)
-                ZStack {
-                    SlipStreamStyle.panel
-                        .ignoresSafeArea()
-                    VStack(spacing: 16) {
-                        Text("Welcome to SlipStream!")
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundStyle(.white)
-                        Text("Onboarding coming soon...")
-                            .foregroundStyle(SlipStreamStyle.muted)
-
-                        // Temporary skip button for testing
-                        Button("Skip to App") {
-                            authState.completeOnboarding()
-                        }
-                        .foregroundStyle(SlipStreamStyle.accent)
-                        .padding(.top, 24)
-                    }
-                }
+                OnboardingContainerView()
 
             case .authenticated:
                 AppRootView()
