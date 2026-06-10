@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -9,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import (
     create_access_token,
+    fetch_apple_public_keys,
     generate_refresh_token,
+    get_apple_public_key,
     hash_password,
     hash_refresh_token,
     verify_password,
@@ -53,6 +56,32 @@ class TokenResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class FullName(BaseModel):
+    """Name components from Apple Sign In."""
+
+    given_name: str | None = None
+    family_name: str | None = None
+
+
+class AppleAuthRequest(BaseModel):
+    """Request body for Apple Sign In."""
+
+    identity_token: str
+    full_name: FullName | None = None
+    email: str | None = None
+
+
+class AppleAuthResponse(BaseModel):
+    """Response for Apple Sign In, extends TokenResponse with is_new_user flag."""
+
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user_id: str
+    username: str
+    is_new_user: bool
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +135,148 @@ async def register(
         user_id=str(user.id),
         username=user.username,
     )
+
+
+@router.post("/apple", response_model=AppleAuthResponse)
+async def auth_with_apple(
+    body: AppleAuthRequest, db: AsyncSession = Depends(get_db)
+) -> AppleAuthResponse:
+    """Exchange Apple identity token for SlipStream tokens.
+
+    This endpoint:
+    1. Fetches Apple's JWKS (cached for 1 hour)
+    2. Validates the identity token signature and claims
+    3. Finds or creates a user by apple_id
+    4. Issues access and refresh tokens
+    5. Returns is_new_user=true for first-time users
+    """
+    try:
+        # Decode JWT header to get kid (key ID) without verification first
+        unverified_header = jwt.get_unverified_header(body.identity_token)
+        kid = unverified_header.get("kid")
+
+        if not kid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Identity token missing key ID (kid)",
+            )
+
+        # Fetch Apple's public keys
+        jwks = await fetch_apple_public_keys()
+
+        # Get the public key matching the kid
+        try:
+            public_key = get_apple_public_key(kid, jwks)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(e),
+            )
+
+        # Verify and decode the identity token
+        payload = jwt.decode(
+            body.identity_token,
+            public_key,
+            algorithms=["RS256"],
+            audience=settings.apple_bundle_id,
+            issuer="https://appleid.apple.com",
+        )
+
+        # Extract Apple user ID (sub claim)
+        apple_user_id = payload.get("sub")
+        if not apple_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Identity token missing subject (sub)",
+            )
+
+        # Check if user already exists with this apple_id
+        result = await db.execute(
+            select(User).where(User.apple_id == apple_user_id)
+        )
+        user = result.scalar_one_or_none()
+        is_new_user = user is None
+
+        if is_new_user:
+            # Create new user
+            # Generate a temporary username from apple_id (user will set their own in onboarding)
+            temp_username = f"user_{apple_user_id[:8].lower()}"
+
+            # Ensure username is unique by appending random suffix if needed
+            existing = await db.execute(
+                select(User).where(User.username == temp_username)
+            )
+            if existing.scalar_one_or_none() is not None:
+                import secrets
+
+                temp_username = f"user_{secrets.token_hex(4)}"
+
+            # Build display name from full_name if provided
+            display_name = None
+            if body.full_name:
+                name_parts = []
+                if body.full_name.given_name:
+                    name_parts.append(body.full_name.given_name)
+                if body.full_name.family_name:
+                    name_parts.append(body.full_name.family_name)
+                if name_parts:
+                    display_name = " ".join(name_parts)
+
+            # Use email from request body (Apple only provides on first sign-in)
+            # or fall back to email from token payload
+            email = body.email or payload.get("email")
+
+            user = User(
+                apple_id=apple_user_id,
+                username=temp_username,
+                email=email,
+                display_name=display_name,
+                password_hash=None,  # Apple auth users don't have passwords
+            )
+            db.add(user)
+            await db.flush()  # Assigns user.id
+
+        # Generate tokens
+        access_token = create_access_token(user.id, user.username)
+        raw_refresh_token = generate_refresh_token()
+
+        # Store refresh token hash
+        refresh_record = RefreshToken(
+            user_id=user.id,
+            token_hash=hash_refresh_token(raw_refresh_token),
+            expires_at=datetime.now(UTC)
+            + timedelta(days=settings.refresh_token_expire_days),
+        )
+        db.add(refresh_record)
+
+        return AppleAuthResponse(
+            access_token=access_token,
+            refresh_token=raw_refresh_token,
+            user_id=str(user.id),
+            username=user.username,
+            is_new_user=is_new_user,
+        )
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Identity token has expired",
+        )
+    except jwt.InvalidAudienceError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Identity token audience does not match",
+        )
+    except jwt.InvalidIssuerError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Identity token issuer is invalid",
+        )
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid identity token: {str(e)}",
+        )
 
 
 @router.post("/login", response_model=TokenResponse)
