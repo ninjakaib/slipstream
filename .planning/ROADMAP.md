@@ -19,10 +19,18 @@
 ## Phase Details
 
 ### Phase 1: Auth & Onboarding
-**Goal:** Users can sign in with Apple and complete required profile/car setup before accessing the app.
+**Goal:** As a new user, I want to sign in with Apple and set up my profile and car, so that I can start using the app to see nearby drivers.
 **Mode:** mvp
 
 **Requirements:** AUTH-01, AUTH-02, AUTH-03, ONBOARD-01, ONBOARD-02, ONBOARD-03, ONBOARD-04
+
+**Plans:** 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Walking skeleton: Apple Sign In + backend token exchange + Keychain storage
+- [ ] 01-02-PLAN.md — Onboarding container + username step with debounced validation
+- [ ] 01-03-PLAN.md — Photo step (optional) + car step with NHTSA cascading pickers
+- [ ] 01-04-PLAN.md — Integration: data persistence + token refresh + toast errors + completion flow
 
 **Success Criteria:**
 1. User can tap "Sign in with Apple" and authenticate
@@ -149,3 +157,4 @@ Phases 3 and 4 can run in parallel after Phase 2.
 
 ---
 *Roadmap created: 2026-06-10*
+*Phase 1 planned: 2026-06-10*
