@@ -148,6 +148,7 @@ class Car(Base):
     model: Mapped[str] = mapped_column(String(100))
     trim: Mapped[str | None] = mapped_column(String(100), nullable=True)
     color: Mapped[str] = mapped_column(String(50))
+    display_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     mods: Mapped[list[str] | None] = mapped_column(
         ARRAY(Text), nullable=True, default=list

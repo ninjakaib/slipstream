@@ -26,6 +26,7 @@ class CarResponse(BaseModel):
     model: str
     trim: str | None = None
     color: str
+    display_name: str | None = None
     photo_url: str | None = None
     mods: list[str] | None = None
     is_active: bool
@@ -40,6 +41,7 @@ class CreateCarRequest(BaseModel):
     model: str = Field(min_length=1, max_length=100)
     trim: str | None = Field(default=None, max_length=100)
     color: str = Field(min_length=1, max_length=50)
+    display_name: str | None = Field(default=None, max_length=50)
     photo_url: str | None = None
     mods: list[str] | None = None
 
@@ -50,6 +52,7 @@ class UpdateCarRequest(BaseModel):
     model: str | None = Field(default=None, min_length=1, max_length=100)
     trim: str | None = Field(default=None, max_length=100)
     color: str | None = Field(default=None, min_length=1, max_length=50)
+    display_name: str | None = Field(default=None, max_length=50)
     photo_url: str | None = None
     mods: list[str] | None = None
 
@@ -71,6 +74,7 @@ def _car_to_response(car: Car) -> CarResponse:
         model=car.model,
         trim=car.trim,
         color=car.color,
+        display_name=car.display_name,
         photo_url=car.photo_url,
         mods=car.mods,
         is_active=car.is_active,
@@ -121,6 +125,7 @@ async def create_car(
         model=body.model,
         trim=body.trim,
         color=body.color,
+        display_name=body.display_name,
         photo_url=body.photo_url,
         mods=body.mods or [],
         is_active=not has_cars,  # First car is auto-activated
