@@ -72,6 +72,7 @@ struct CreateCarRequest: Encodable {
     let model: String
     let trim: String?
     let color: String
+    let display_name: String?
     let photo_url: String?
     let mods: [String]?
 }
@@ -84,6 +85,7 @@ struct CreateCarResponse: Decodable {
     let model: String
     let trim: String?
     let color: String
+    let display_name: String?
     let photo_url: String?
     let mods: [String]?
     let is_active: Bool
@@ -565,6 +567,7 @@ struct CarStepView: View {
             model: effectiveModel,
             trim: trim.isEmpty ? nil : trim,
             color: color.hex,
+            display_name: displayName.isEmpty ? nil : displayName,
             photo_url: nil,
             mods: nil
         )
@@ -576,9 +579,6 @@ struct CarStepView: View {
                 body: request,
                 authenticated: true
             )
-
-            // Note: displayName is stored locally for now as backend may not support it yet.
-            // Future phase will add display_name field to backend schema if needed.
 
             // Success - complete onboarding
             await MainActor.run {
