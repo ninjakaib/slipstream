@@ -13,6 +13,7 @@ services:
   postgres:
     image: postgis/postgis:17-3.5-alpine
     container_name: slipstream_postgres
+    platform: linux/amd64
     restart: unless-stopped
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
