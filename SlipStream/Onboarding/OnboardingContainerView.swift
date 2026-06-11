@@ -26,6 +26,31 @@ enum OnboardingPage: String, Identifiable, CaseIterable {
     var id: String { rawValue }
 }
 
+/// Request body for PATCH /users/me endpoint.
+struct UpdateProfileRequest: Encodable {
+    let username: String?
+    let display_name: String?
+    let avatar_url: String?
+
+    init(username: String? = nil, displayName: String? = nil, avatarUrl: String? = nil) {
+        self.username = username
+        self.display_name = displayName
+        self.avatar_url = avatarUrl
+    }
+}
+
+/// Response from /users/me endpoint.
+struct UserProfileResponse: Decodable {
+    let id: String
+    let username: String
+    let email: String?
+    let display_name: String?
+    let avatar_url: String?
+    let visibility: String
+    let discovery_radius_miles: Int
+    let speed_unit: String
+}
+
 /// Multi-step onboarding wizard container.
 ///
 /// Uses a horizontal ScrollView with programmatic navigation (per D-01).
@@ -43,6 +68,17 @@ struct OnboardingContainerView: View {
     @State private var username: String = ""
     @State private var profileImage: UIImage? = nil
     @State private var carData: CarFormData? = nil
+
+    // Toast state
+    @State private var showToast = false
+    @State private var toastMessage = ""
+    @State private var toastStyle: ToastStyle = .error
+
+    // Submission state
+    @State private var isSubmitting = false
+
+    // API client
+    private let apiClient = APIClient()
 
     // MARK: - Body
 
@@ -71,6 +107,7 @@ struct OnboardingContainerView: View {
         .onAppear {
             position.scrollTo(id: OnboardingPage.username.id)
         }
+        .toast(isPresented: $showToast, message: toastMessage, style: toastStyle)
     }
 
     // MARK: - Page Views
@@ -86,64 +123,21 @@ struct OnboardingContainerView: View {
             )
 
         case .photo:
-            // Placeholder for photo step (implemented in Plan 03)
-            VStack(spacing: 24) {
-                Spacer()
-                Image(systemName: "person.crop.circle.badge.plus")
-                    .font(.system(size: 64))
-                    .foregroundStyle(SlipStreamStyle.muted)
-                Text("Photo Step")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text("Coming in Plan 03")
-                    .foregroundStyle(SlipStreamStyle.muted)
-                Spacer()
-
-                // Navigation buttons
-                HStack(spacing: 16) {
-                    Button("Back") {
-                        goToPage(.username)
-                    }
-                    .foregroundStyle(SlipStreamStyle.muted)
-
-                    Button("Skip") {
-                        goToPage(.car)
-                    }
-                    .foregroundStyle(SlipStreamStyle.accent)
-                }
-                .padding(.bottom, 32)
-            }
-            .frame(maxWidth: .infinity)
+            PhotoStepView(
+                profileImage: $profileImage,
+                onNext: { goToPage(.car) },
+                onBack: { goToPage(.username) }
+            )
 
         case .car:
-            // Placeholder for car step (implemented in Plan 03)
-            VStack(spacing: 24) {
-                Spacer()
-                Image(systemName: "car.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(SlipStreamStyle.muted)
-                Text("Car Step")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text("Coming in Plan 03")
-                    .foregroundStyle(SlipStreamStyle.muted)
-                Spacer()
-
-                // Navigation buttons
-                HStack(spacing: 16) {
-                    Button("Back") {
-                        goToPage(.photo)
+            CarStepView(
+                onComplete: {
+                    Task {
+                        await finishOnboarding()
                     }
-                    .foregroundStyle(SlipStreamStyle.muted)
-
-                    Button("Complete") {
-                        completeOnboarding()
-                    }
-                    .foregroundStyle(SlipStreamStyle.accent)
-                }
-                .padding(.bottom, 32)
-            }
-            .frame(maxWidth: .infinity)
+                },
+                onBack: { goToPage(.photo) }
+            )
         }
     }
 
@@ -158,9 +152,43 @@ struct OnboardingContainerView: View {
         }
     }
 
-    /// Complete onboarding and transition to authenticated state.
-    func completeOnboarding() {
-        authState.completeOnboarding()
+    /// Save username to backend via PATCH /users/me.
+    ///
+    /// Called during onboarding completion to persist username.
+    func saveUsername() async throws {
+        let request = UpdateProfileRequest(username: username)
+        let _: UserProfileResponse = try await apiClient.request(
+            "/users/me",
+            method: "PATCH",
+            body: request,
+            authenticated: true
+        )
+    }
+
+    /// Finish onboarding: save username then transition to authenticated.
+    ///
+    /// Car creation happens in CarStepView before this is called.
+    /// Per D-09: Errors show toast, allow retry.
+    func finishOnboarding() async {
+        isSubmitting = true
+        defer { isSubmitting = false }
+
+        do {
+            // Save username to backend
+            try await saveUsername()
+
+            // Transition to authenticated state
+            await MainActor.run {
+                authState.completeOnboarding()
+            }
+        } catch {
+            // Show error toast, stay on screen for retry
+            await MainActor.run {
+                toastMessage = "Failed to save profile. Please try again."
+                toastStyle = .error
+                showToast = true
+            }
+        }
     }
 }
 
