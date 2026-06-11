@@ -92,7 +92,9 @@ actor VehicleDataService {
     ///
     /// Returns years from 1980 to current year + 1 (for next model year).
     /// NHTSA vPIC has no endpoint for years, so we generate client-side.
-    func getYears() -> [Int] {
+    /// Marked nonisolated so SwiftUI views can call it synchronously — it
+    /// touches no actor-isolated state.
+    nonisolated func getYears() -> [Int] {
         let currentYear = Calendar.current.component(.year, from: Date())
         return Array((1980...(currentYear + 1)).reversed())
     }

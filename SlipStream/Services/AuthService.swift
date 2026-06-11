@@ -5,6 +5,7 @@
 //  Created by Claude on 6/10/26.
 //
 
+import Combine
 import Foundation
 
 /// Service for authentication operations.

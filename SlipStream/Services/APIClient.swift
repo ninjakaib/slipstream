@@ -132,8 +132,9 @@ actor APIClient {
         if httpResponse.statusCode == 401 && authenticated && !isRefreshing {
             do {
                 try await refreshTokenIfNeeded()
-                // Retry the original request with new token
-                return try await request(endpoint, method: method, body: body, authenticated: authenticated)
+                // Retry the original request with new token. Use self. to disambiguate
+                // from the local `request` URLRequest variable that shadows this method.
+                return try await self.request(endpoint, method: method, body: body, authenticated: authenticated)
             } catch {
                 throw APIClientError.unauthorized
             }

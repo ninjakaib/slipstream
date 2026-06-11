@@ -45,3 +45,9 @@ struct AppRootView: View {
         .preferredColorScheme(.dark)
     }
 }
+
+#Preview {
+    AppRootView()
+        .environmentObject(SlipStreamViewModel())
+}
+

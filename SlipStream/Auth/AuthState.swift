@@ -5,6 +5,7 @@
 //  Created by Claude on 6/10/26.
 //
 
+import Combine
 import Foundation
 
 /// Authentication states for the app.
@@ -54,8 +55,11 @@ final class AuthState: ObservableObject {
 
     // MARK: - Initialization
 
-    init(authService: AuthService = AuthService()) {
-        self.authService = authService
+    init(authService: AuthService? = nil) {
+        // Construct the default AuthService inside the init body — a default
+        // argument expression runs in a nonisolated context and can't call
+        // AuthService's @MainActor initializer.
+        self.authService = authService ?? AuthService()
         Task {
             await checkAuthStatus()
         }

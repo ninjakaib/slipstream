@@ -609,16 +609,6 @@ struct SlipStreamTextFieldStyle: TextFieldStyle {
     }
 }
 
-// MARK: - Private Extension for Sync Years
-
-private extension VehicleDataService {
-    /// Synchronous version of getYears() for use in SwiftUI views.
-    nonisolated func getYears() -> [Int] {
-        let currentYear = Calendar.current.component(.year, from: Date())
-        return Array((1980...(currentYear + 1)).reversed())
-    }
-}
-
 // MARK: - Preview
 
 #Preview {
