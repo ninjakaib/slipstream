@@ -53,6 +53,46 @@ struct AppleAuthResponse: Codable {
     }
 }
 
+// MARK: - Username/Password Auth
+
+/// Request body for POST /auth/register endpoint.
+struct RegisterRequest: Codable {
+    let username: String
+    let password: String
+    let email: String?
+    let displayName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case username
+        case password
+        case email
+        case displayName = "display_name"
+    }
+}
+
+/// Request body for POST /auth/login endpoint.
+struct LoginRequest: Codable {
+    let username: String
+    let password: String
+}
+
+/// Response from POST /auth/register and POST /auth/login endpoints.
+struct TokenResponse: Codable {
+    let accessToken: String
+    let refreshToken: String
+    let tokenType: String
+    let userId: String
+    let username: String
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case refreshToken = "refresh_token"
+        case tokenType = "token_type"
+        case userId = "user_id"
+        case username
+    }
+}
+
 // MARK: - Token Refresh
 
 /// Request body for POST /auth/refresh endpoint.

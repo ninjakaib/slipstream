@@ -247,9 +247,12 @@ struct SlipStreamMapView: UIViewRepresentable {
             guard let navigationMapView else { return }
             let mapView = navigationMapView.mapView
 
-            // Remove all current annotations
+            // Remove all current annotations. Must go through the
+            // ViewAnnotationManager — removeFromSuperview() alone leaves the
+            // manager still tracking (and repositioning) the orphaned view,
+            // which causes duplicate markers to pile up on every update.
             for (_, view) in activeAnnotations {
-                view.removeFromSuperview()
+                mapView.viewAnnotations.remove(view)
             }
             activeAnnotations.removeAll()
 

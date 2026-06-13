@@ -19,6 +19,9 @@ import SwiftUI
 struct WelcomeView: View {
     @EnvironmentObject private var authState: AuthState
 
+    @State private var showingCreateAccount = false
+    @State private var showingLogIn = false
+
     var body: some View {
         ZStack {
             // Dark background
@@ -51,6 +54,27 @@ struct WelcomeView: View {
                 .signInWithAppleButtonStyle(.white)
                 .frame(height: 50)
                 .padding(.horizontal, 24)
+                .padding(.bottom, 16)
+
+                // Username/password account options
+                VStack(spacing: 12) {
+                    SecondaryActionButton(
+                        title: "Create Account",
+                        systemImage: "person.badge.plus"
+                    ) {
+                        authState.dismissError()
+                        showingCreateAccount = true
+                    }
+
+                    SecondaryActionButton(
+                        title: "Log In",
+                        systemImage: "arrow.right.circle"
+                    ) {
+                        authState.dismissError()
+                        showingLogIn = true
+                    }
+                }
+                .padding(.horizontal, 24)
                 .padding(.bottom, 48)
             }
 
@@ -68,6 +92,12 @@ struct WelcomeView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(.easeInOut(duration: 0.3), value: authState.errorMessage)
             }
+        }
+        .sheet(isPresented: $showingCreateAccount) {
+            CreateAccountView()
+        }
+        .sheet(isPresented: $showingLogIn) {
+            LogInView()
         }
     }
 

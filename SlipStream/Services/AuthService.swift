@@ -69,6 +69,62 @@ final class AuthService: ObservableObject {
         return response
     }
 
+    /// Register a new account with username and password.
+    ///
+    /// - Parameters:
+    ///   - username: Desired username (3-20 chars, alphanumeric/underscore)
+    ///   - password: Password (8-128 chars)
+    ///   - email: Optional email address
+    ///   - displayName: Optional display name
+    /// - Returns: TokenResponse with the new account's tokens
+    func register(
+        username: String,
+        password: String,
+        email: String?,
+        displayName: String?
+    ) async throws -> TokenResponse {
+        let request = RegisterRequest(
+            username: username,
+            password: password,
+            email: email,
+            displayName: displayName
+        )
+
+        let response: TokenResponse = try await apiClient.request(
+            "/auth/register",
+            method: "POST",
+            body: request,
+            authenticated: false
+        )
+
+        keychainService.saveToken(response.accessToken, account: KeychainService.Account.accessToken)
+        keychainService.saveToken(response.refreshToken, account: KeychainService.Account.refreshToken)
+
+        return response
+    }
+
+    /// Log in with username and password.
+    ///
+    /// - Parameters:
+    ///   - username: Account username
+    ///   - password: Account password
+    /// - Returns: TokenResponse with the account's tokens
+    func login(username: String, password: String) async throws -> TokenResponse {
+        let request = LoginRequest(username: username, password: password)
+
+        let response: TokenResponse = try await apiClient.request(
+            "/auth/login",
+            method: "POST",
+            body: request,
+            authenticated: false
+        )
+
+        keychainService.saveToken(response.accessToken, account: KeychainService.Account.accessToken)
+        keychainService.saveToken(response.refreshToken, account: KeychainService.Account.refreshToken)
+
+        return response
+    }
+
     /// Refresh authentication tokens.
     ///
     /// Called silently when app resumes from background (per D-09).

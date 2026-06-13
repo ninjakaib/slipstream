@@ -144,6 +144,65 @@ final class AuthState: ObservableObject {
         }
     }
 
+    /// Register a new account with username and password.
+    ///
+    /// New accounts always go through onboarding.
+    func register(
+        username: String,
+        password: String,
+        email: String?,
+        displayName: String?
+    ) async {
+        errorMessage = nil
+
+        do {
+            let response = try await authService.register(
+                username: username,
+                password: password,
+                email: email,
+                displayName: displayName
+            )
+
+            currentUser = CurrentUser(
+                id: response.userId,
+                username: response.username,
+                displayName: displayName,
+                email: email
+            )
+            state = .onboarding
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Log in with username and password.
+    func login(username: String, password: String) async {
+        errorMessage = nil
+
+        do {
+            let response = try await authService.login(username: username, password: password)
+
+            if let profile = await authService.validateTokens() {
+                currentUser = CurrentUser(
+                    id: profile.id,
+                    username: profile.username,
+                    displayName: profile.displayName,
+                    email: profile.email
+                )
+            } else {
+                currentUser = CurrentUser(
+                    id: response.userId,
+                    username: response.username,
+                    displayName: nil,
+                    email: nil
+                )
+            }
+            state = .authenticated
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Complete onboarding and transition to authenticated state.
     func completeOnboarding() {
         state = .authenticated
