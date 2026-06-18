@@ -1,4 +1,4 @@
-"""WebSocket endpoint for the spatial pub/sub system.
+"""WebSocket endpoint and REST helpers for the spatial pub/sub system.
 
 Handles:
     - Connection authentication (JWT from query param)
@@ -7,14 +7,13 @@ Handles:
 
 Protocol:
     Client → Server:
-        location_update: {lat, lng, heading, speed, status, cells: [...]}
+        location_update: {lat, lng, heading, speed, status}
         viewport_update: {cells: [...]}
         heartbeat: {}
 
     Server → Client:
         viewport_snapshot: {drivers: [{user_id, lat, lng, heading, speed, status}, ...]}
         driver_moved: {user_id, lat, lng, heading, speed, status}
-        driver_entered: {user_id, lat, lng, heading, speed, status}
         driver_exited: {user_id}
         heartbeat_ack: {}
         error: {message: "..."}
@@ -33,11 +32,36 @@ from backend.spatial.handlers import (
     handle_location_update,
     handle_viewport_update,
 )
-from backend.spatial.store import spatial_store
+from backend.spatial.store import spatial_store, INDEX_RESOLUTIONS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["spatial"])
+
+
+# ---------------------------------------------------------------------------
+# REST: Configuration endpoint for clients
+# ---------------------------------------------------------------------------
+
+
+@router.get("/spatial/config")
+async def get_spatial_config() -> dict:
+    """Return spatial system configuration for clients.
+
+    Clients use this to know which H3 resolutions are supported
+    and should be used for viewport cell computation.
+    """
+    return {
+        "resolutions": list(INDEX_RESOLUTIONS),
+        "finest_resolution": max(INDEX_RESOLUTIONS),
+        "coarsest_resolution": min(INDEX_RESOLUTIONS),
+        "max_viewport_cells": 64,
+    }
+
+
+# ---------------------------------------------------------------------------
+# WebSocket: Real-time position streaming
+# ---------------------------------------------------------------------------
 
 
 @router.websocket("/ws/live")
@@ -114,9 +138,7 @@ async def spatial_websocket(websocket: WebSocket) -> None:
                     await conn.send(
                         {
                             "type": "error",
-                            "payload": {
-                                "message": f"Unknown message type: {msg_type}"
-                            },
+                            "payload": {"message": f"Unknown message type: {msg_type}"},
                         }
                     )
 

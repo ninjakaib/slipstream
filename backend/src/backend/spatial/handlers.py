@@ -1,7 +1,7 @@
 """WebSocket message handlers for the spatial pub/sub system.
 
 Each handler corresponds to an incoming message type:
-    - location_update: Driver reports new position + H3 cells
+    - location_update: Driver reports new position (server computes H3 cells)
     - viewport_update: Client reports which cells their viewport covers
     - heartbeat: Keep-alive acknowledgment
     - disconnect: Cleanup and notify watchers
@@ -35,12 +35,12 @@ async def handle_location_update(
 ) -> float:
     """Process a location update from a client.
 
-    Validates the payload, updates the store, and dispatches events to
-    watchers of affected cells.
+    Validates the payload, updates the store (which computes H3 cells
+    server-side), and dispatches events to watchers of affected cells.
 
     Args:
         conn: The connection sending the update.
-        payload: Message payload with lat, lng, heading, speed, status, cells.
+        payload: Message payload with lat, lng, heading, speed, status.
         store: The spatial store instance.
         last_update_ts: Timestamp of the last accepted update (for rate limiting).
 
@@ -66,13 +66,7 @@ async def handle_location_update(
     if status not in VALID_STATUSES:
         status = "driving"
 
-    # H3 cells computed by the client
-    raw_cells = payload.get("cells", [])
-    if not isinstance(raw_cells, list):
-        return last_update_ts
-    cells = set(raw_cells)
-
-    # Update store — returns which cells were entered/exited/stayed
+    # Update store — server computes H3 cells, returns cell transitions
     transition = store.update_position(
         user_id=conn.user_id,
         lat=lat,
@@ -80,7 +74,6 @@ async def handle_location_update(
         heading=heading,
         speed=speed,
         status=status,
-        cells=cells,
     )
 
     # Build the position message (reused for all recipients)

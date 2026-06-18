@@ -31,8 +31,10 @@ logger = logging.getLogger(__name__)
 # Maximum cells a client can subscribe to in their viewport.
 MAX_VIEWPORT_CELLS = 64
 
-# Maximum cells a client can claim for their position (one per resolution).
-MAX_POSITION_CELLS = 8
+# Resolutions at which every driver is indexed.
+# Each location update produces one cell per resolution.
+# Viewers subscribe at whichever resolution matches their zoom level.
+INDEX_RESOLUTIONS: tuple[int, ...] = (4, 5, 6, 7)
 
 
 class SpatialStore:
@@ -137,9 +139,12 @@ class SpatialStore:
         heading: float,
         speed: float,
         status: str,
-        cells: set[str],
     ) -> CellTransition:
         """Update a user's position and cell membership.
+
+        Computes the H3 cells for the given coordinates at all supported
+        resolutions, updates the spatial index, and returns the cell
+        transition for event dispatch.
 
         Args:
             user_id: The user whose position is being updated.
@@ -147,13 +152,12 @@ class SpatialStore:
             heading: Direction of travel in degrees.
             speed: Current speed.
             status: Driving status string.
-            cells: Set of H3 cell IDs at all resolutions (computed by client).
 
         Returns:
             CellTransition describing which cells were entered/exited/stayed.
         """
-        # Validate and cap cells
-        valid_cells = self._validate_cells(cells)
+        # Server computes H3 cells — authoritative, no client trust needed
+        new_cells = {h3.latlng_to_cell(lat, lng, res) for res in INDEX_RESOLUTIONS}
 
         # Get previous state
         old_pos = self._positions.get(user_id)
@@ -161,9 +165,9 @@ class SpatialStore:
 
         # Compute transition
         transition = CellTransition(
-            entered=valid_cells - old_cells,
-            exited=old_cells - valid_cells,
-            stayed=valid_cells & old_cells,
+            entered=new_cells - old_cells,
+            exited=old_cells - new_cells,
+            stayed=new_cells & old_cells,
         )
 
         # Update position
@@ -174,7 +178,7 @@ class SpatialStore:
             heading=heading,
             speed=speed,
             status=status,
-            cells=valid_cells,
+            cells=new_cells,
             updated_at=time.time(),
         )
 
@@ -218,7 +222,7 @@ class SpatialStore:
             return ViewportTransition()
 
         # Validate and cap
-        valid_cells = self._validate_cells(cells, max_count=MAX_VIEWPORT_CELLS)
+        valid_cells = self._validate_viewport_cells(cells)
 
         old_viewport = conn.viewport_cells
         transition = ViewportTransition(
@@ -326,20 +330,17 @@ class SpatialStore:
     # Internal
     # ------------------------------------------------------------------
 
-    def _validate_cells(
-        self,
-        cells: set[str],
-        max_count: int = MAX_POSITION_CELLS,
-    ) -> set[str]:
-        """Validate H3 cell strings and cap the count.
+    def _validate_viewport_cells(self, cells: set[str]) -> set[str]:
+        """Validate H3 cell strings from a viewport update.
 
-        Returns only valid H3 cell indexes, limited to max_count.
+        Returns only valid H3 cell indexes at supported resolutions,
+        limited to MAX_VIEWPORT_CELLS.
         """
         valid: set[str] = set()
         for cell in cells:
-            if len(valid) >= max_count:
+            if len(valid) >= MAX_VIEWPORT_CELLS:
                 break
-            if h3.is_valid_cell(cell):
+            if h3.is_valid_cell(cell) and h3.get_resolution(cell) in INDEX_RESOLUTIONS:
                 valid.add(cell)
         return valid
 
