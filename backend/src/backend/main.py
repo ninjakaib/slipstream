@@ -15,6 +15,7 @@ from backend.routers.convoys import router as convoys_router
 from backend.routers.discovery import router as discovery_router
 from backend.realtime import ws_router
 from backend.redis import init_redis, close_redis, start_pubsub_listener
+from backend.spatial import spatial_router
 
 # Configure logging
 logging.basicConfig(
@@ -64,6 +65,7 @@ app.include_router(friends_router)
 app.include_router(convoys_router)
 app.include_router(discovery_router)
 app.include_router(ws_router)
+app.include_router(spatial_router)
 
 
 # ---------------------------------------------------------------------------
@@ -75,9 +77,11 @@ app.include_router(ws_router)
 async def health_check() -> dict:
     """Basic health check endpoint."""
     from backend.realtime.manager import manager
+    from backend.spatial.store import spatial_store
 
     return {
         "status": "ok",
         "service": settings.app_name,
         "active_connections": manager.connection_count,
+        "spatial": spatial_store.stats(),
     }
