@@ -51,7 +51,7 @@ app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
     description="Real-time social driving network for car enthusiasts.",
-    lifespan=lifespan,
+    # lifespan=lifespan,
 )
 
 # ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ app.include_router(cars_router)
 app.include_router(friends_router)
 app.include_router(convoys_router)
 app.include_router(discovery_router)
-app.include_router(ws_router)
+# app.include_router(ws_router)
 app.include_router(spatial_router)
 
 
@@ -82,6 +82,6 @@ async def health_check() -> dict:
     return {
         "status": "ok",
         "service": settings.app_name,
-        "active_connections": manager.connection_count,
+        # "active_connections": manager.connection_count,
         "spatial": spatial_store.stats(),
     }
