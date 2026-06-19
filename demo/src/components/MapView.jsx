@@ -79,13 +79,14 @@ function cellsToGeoJSON(cells) {
 }
 
 /**
- * @param {{ drivers: object, onCellsChanged: function, showHexGrid: boolean, viewportCells: string[] }} props
+ * @param {{ drivers: object, onCellsChanged: function, showHexGrid: boolean, viewportCells: string[], cellOptions: object }} props
  */
 export function MapView({
   drivers,
   onCellsChanged,
   showHexGrid,
   viewportCells,
+  cellOptions,
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -208,7 +209,7 @@ export function MapView({
   }, [map, showHexGrid]);
 
   // Subscribe to viewport cells
-  useViewportCells(map, onCellsChanged);
+  useViewportCells(map, onCellsChanged, cellOptions);
 
   return <div id="map-container" ref={mapContainerRef} />;
 }

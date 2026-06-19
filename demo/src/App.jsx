@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { MapView } from "./components/MapView";
 import { LoginForm } from "./components/LoginForm";
@@ -9,13 +9,23 @@ function App() {
   const [token, setToken] = useState(null);
   const [showHexGrid, setShowHexGrid] = useState(false);
   const [viewportCells, setViewportCells] = useState([]);
+  const [currentResolution, setCurrentResolution] = useState(0);
+  const [containmentMode, setContainmentMode] = useState("overlapping");
+  const [serverOnly, setServerOnly] = useState(true);
   const { drivers, status, sendViewportUpdate, stats } = useWebSocket(token);
   const driverCount = Object.keys(drivers).length;
 
+  // Memoize cell options to prevent unnecessary re-renders
+  const cellOptions = useMemo(
+    () => ({ containmentMode, serverOnly }),
+    [containmentMode, serverOnly],
+  );
+
   // When viewport cells change, track them locally AND send to server
   const handleCellsChanged = useCallback(
-    (cells) => {
+    (cells, resolution) => {
       setViewportCells(cells);
+      setCurrentResolution(resolution);
       sendViewportUpdate(cells);
     },
     [sendViewportUpdate],
@@ -41,6 +51,7 @@ function App() {
         onCellsChanged={handleCellsChanged}
         showHexGrid={showHexGrid}
         viewportCells={viewportCells}
+        cellOptions={cellOptions}
       />
 
       {status !== "disconnected" && (
@@ -49,8 +60,13 @@ function App() {
           driverCount={driverCount}
           stats={stats}
           cellCount={viewportCells.length}
+          currentResolution={currentResolution}
           showHexGrid={showHexGrid}
           onToggleHexGrid={() => setShowHexGrid((v) => !v)}
+          containmentMode={containmentMode}
+          onContainmentModeChange={setContainmentMode}
+          serverOnly={serverOnly}
+          onServerOnlyChange={setServerOnly}
         />
       )}
 

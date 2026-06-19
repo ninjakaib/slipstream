@@ -34,7 +34,7 @@ MAX_VIEWPORT_CELLS = 64
 # Resolutions at which every driver is indexed.
 # Each location update produces one cell per resolution.
 # Viewers subscribe at whichever resolution matches their zoom level.
-INDEX_RESOLUTIONS: tuple[int, ...] = (4, 5, 6, 7)
+INDEX_RESOLUTIONS: tuple[int, ...] = (1, 2, 3, 4, 5)
 
 
 class SpatialStore:

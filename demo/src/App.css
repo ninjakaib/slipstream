@@ -207,3 +207,48 @@
 .stats-panel .toggle-btn .toggle-icon {
   font-size: 14px;
 }
+
+/* Hex grid debug controls */
+.stats-panel .hex-controls {
+  margin-top: 10px;
+}
+
+.stats-panel .hex-controls .control-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #666;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.stats-panel .hex-controls .control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.stats-panel .hex-controls .mode-btn {
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #888;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.stats-panel .hex-controls .mode-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #bbb;
+}
+
+.stats-panel .hex-controls .mode-btn.active {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #a5b4fc;
+}
