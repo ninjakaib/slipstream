@@ -1,16 +1,24 @@
 /**
- * StatsPanel — overlay showing connection status and driver count.
+ * StatsPanel — overlay showing connection status, driver count, and debug controls.
  */
 
 /**
- * @param {{ status: string, driverCount: number, stats: object }} props
+ * @param {{ status: string, driverCount: number, stats: object, cellCount: number, showHexGrid: boolean, onToggleHexGrid: function }} props
  */
-export function StatsPanel({ status, driverCount, stats }) {
-  const statusLabel = {
-    connected: 'Connected',
-    connecting: 'Connecting...',
-    disconnected: 'Disconnected',
-  }[status] || 'Unknown';
+export function StatsPanel({
+  status,
+  driverCount,
+  stats,
+  cellCount,
+  showHexGrid,
+  onToggleHexGrid,
+}) {
+  const statusLabel =
+    {
+      connected: "Connected",
+      connecting: "Connecting...",
+      disconnected: "Disconnected",
+    }[status] || "Unknown";
 
   return (
     <div className="stats-panel">
@@ -29,9 +37,27 @@ export function StatsPanel({ status, driverCount, stats }) {
       </div>
 
       <div className="stat-row">
-        <span>Messages</span>
-        <span className="stat-value">{stats.messagesReceived.toLocaleString()}</span>
+        <span>Cells</span>
+        <span className="stat-value">{cellCount}</span>
       </div>
+
+      <div className="stat-row">
+        <span>Messages</span>
+        <span className="stat-value">
+          {stats.messagesReceived.toLocaleString()}
+        </span>
+      </div>
+
+      <div className="stat-divider" />
+
+      <button
+        className={`toggle-btn ${showHexGrid ? "active" : ""}`}
+        onClick={onToggleHexGrid}
+        title="Toggle H3 hex grid overlay (also: press H)"
+      >
+        <span className="toggle-icon">⬡</span>
+        {showHexGrid ? "Hide" : "Show"} hex grid
+      </button>
     </div>
   );
 }

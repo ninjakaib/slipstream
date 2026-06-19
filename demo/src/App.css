@@ -170,3 +170,40 @@
   margin-top: 12px;
   text-align: center;
 }
+
+/* Stats panel toggle button */
+.stats-panel .stat-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 10px 0;
+}
+
+.stats-panel .toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #aaa;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.stats-panel .toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ddd;
+}
+
+.stats-panel .toggle-btn.active {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #a5b4fc;
+}
+
+.stats-panel .toggle-btn .toggle-icon {
+  font-size: 14px;
+}
