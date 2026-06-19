@@ -535,3 +535,69 @@ Server → Alice:
 | Server → Client | `error` | Bad message format, unknown type, etc. |
 
 Note that there's no explicit `driver_entered` event in the current implementation — the first time a watcher sees a new driver, it arrives either in a `viewport_snapshot` (if the driver was already there when the viewport was set) or as a `driver_moved` (if the driver moved into the cell after the viewport was set). The client just needs to handle "if I get a `driver_moved` for a user_id I don't have a marker for yet → add it." This simplifies the server logic since we don't need to distinguish between "first move into a watched cell" vs "subsequent move within a watched cell."
+
+
+
+
+---
+
+There are some code changes that aren't yet reflected in the doumentation though.  Here's the summary of what changed:
+
+---
+
+## Summary of Changes
+
+### Design Decision: Split Responsibility
+
+| Path | Who computes H3 cells | Rationale |
+
+|------|:---------------------:|-----------|
+
+| **Location updates** | Server | Authority, no validation needed, trivial CPU cost (~2μs per call × 4 resolutions) |
+
+| **Viewport updates** | Client | Only the client knows its screen geometry, zoom level, and visible map bounds |
+
+### Supported Resolutions: `(4, 5, 6, 7)`
+
+| Res | Edge Length | Role |
+
+|:---:|:-----------:|------|
+
+| 4 | 26 km | City/metro overview (zoomed way out) |
+
+| 5 | 9.8 km | District/highway corridor |
+
+| 6 | 3.7 km | Neighborhood / normal driving zoom |
+
+| 7 | 1.4 km | Street-level / zoomed in tight |
+
+Every driver is indexed in exactly **4 cells** per location update. Viewers pick one resolution for their viewport based on zoom level.
+
+### What Changed in Code
+
+- **`store.py`**: `update_position()` no longer accepts a `cells` parameter — it computes them internally via `h3.latlng_to_cell()` at each `INDEX_RESOLUTIONS` level
+
+- **`store.py`**: `_validate_cells()` renamed to `_validate_viewport_cells()` and now also rejects cells at unsupported resolutions
+
+- **`handlers.py`**: `handle_location_update()` no longer reads or validates a `cells` field from the payload
+
+- **`router.py`**: Added `GET /spatial/config` endpoint so clients can discover supported resolutions at runtime
+
+- **Protocol**: `location_update` payload simplified to just `{lat, lng, heading, speed, status}`
+
+### Updated Protocol
+
+```
+
+Client → Server:
+
+  location_update: {lat, lng, heading, speed, status}     ← no cells
+
+  viewport_update: {cells: ["872830828ffffff", ...]}       ← client computes these
+
+  heartbeat: {}
+
+```
+
+The `/spatial/config` endpoint tells clients which resolutions to use when computing viewport cells, so the client and server always agree without hardcoding.
+
