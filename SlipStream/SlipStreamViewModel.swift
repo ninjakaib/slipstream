@@ -1,20 +1,13 @@
-//
-//  SlipStreamViewModel.swift
-//  SlipStream
-//
-//  Created by Codex on 6/4/26.
-//
-
 import Combine
 import CoreLocation
 import SwiftUI
 
 @MainActor
 final class SlipStreamViewModel: ObservableObject {
-    @Published var drivers: [Driver]
-    @Published var convoys: [Convoy]
-    @Published var meetups: [MeetupSpot]
-    @Published var messages: [ChatMessage]
+    @Published var drivers: [Driver] = []
+    @Published var convoys: [Convoy] = []
+    @Published var meetups: [MeetupSpot] = []
+    @Published var messages: [ChatMessage] = []
     @Published var myStatus: DriverStatus = .available
     @Published var visibility: VisibilityMode = .exact
     @Published var selectedMapFilter: MapFilter = .all
@@ -23,23 +16,215 @@ final class SlipStreamViewModel: ObservableObject {
     @Published var currentSpeed: Int = 0
     @Published var currentRoadName: String = ""
     @Published var currentSpeedLimit: Int? = nil
+    @Published var isConnected: Bool = false
 
-    let myCoordinate = CLLocationCoordinate2D(latitude: 34.1341, longitude: -118.3215)
+    let locationService = LocationService()
+    let webSocketService = WebSocketService()
+    private let apiClient = APIClient()
+    private var cancellables = Set<AnyCancellable>()
+    private var locationUpdateTimer: Timer?
+
+    // Placeholder until user profile is loaded from API
     let myVehicle = Vehicle(
-        year: 2023,
-        make: "Toyota",
-        model: "GR86",
-        trim: "Premium",
-        mods: ["Coilovers", "Catback", "Michelin PS4S"],
-        color: .red
+        year: 0, make: "—", model: "", trim: "", mods: [], color: .gray
     )
 
-    init() {
-        drivers = DemoData.drivers
-        convoys = DemoData.convoys
-        meetups = DemoData.meetups
-        messages = DemoData.messages
+    var userCoordinate: CLLocationCoordinate2D? {
+        locationService.coordinate
     }
+
+    init() {
+        setupBindings()
+    }
+
+    // MARK: - Setup
+
+    private func setupBindings() {
+        // Send location updates every 3s
+        locationService.$currentLocation
+            .compactMap { $0 }
+            .throttle(for: .seconds(3), scheduler: DispatchQueue.main, latest: true)
+            .sink { [weak self] location in
+                self?.handleLocationUpdate(location)
+            }
+            .store(in: &cancellables)
+
+        // On first location, immediately subscribe and fetch
+        locationService.$currentLocation
+            .compactMap { $0 }
+            .first()
+            .sink { [weak self] location in
+                guard let self else { return }
+                self.webSocketService.sendSubscribeArea(
+                    lat: location.coordinate.latitude,
+                    lng: location.coordinate.longitude
+                )
+                Task {
+                    await self.fetchNearbyDrivers()
+                    await self.fetchNearbyConvoys()
+                }
+            }
+            .store(in: &cancellables)
+
+        locationService.$authorizationStatus
+            .sink { [weak self] status in
+                guard let self else { return }
+                if status == .authorizedWhenInUse || status == .authorizedAlways {
+                    self.locationService.startUpdating()
+                }
+            }
+            .store(in: &cancellables)
+
+        webSocketService.$nearbyDrivers
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] updates in
+                self?.applyDriverUpdates(updates)
+            }
+            .store(in: &cancellables)
+
+        webSocketService.$exitedDriverId
+            .compactMap { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] userId in
+                self?.handleDriverExited(userId)
+            }
+            .store(in: &cancellables)
+
+        webSocketService.$connectionState
+            .receive(on: DispatchQueue.main)
+            .map { $0 == .connected }
+            .assign(to: &$isConnected)
+    }
+
+    // MARK: - Lifecycle
+
+    func start() {
+        locationService.requestPermission()
+        webSocketService.connect()
+    }
+
+    func stop() {
+        webSocketService.disconnect()
+        locationService.stopUpdating()
+        stopLocationUpdates()
+    }
+
+    // MARK: - Discovery API
+
+    func fetchNearbyDrivers() async {
+        guard let coordinate = userCoordinate else { return }
+
+        do {
+            let response: [NearbyDriverResponse] = try await apiClient.request(
+                "/discovery/nearby?lat=\(coordinate.latitude)&lng=\(coordinate.longitude)",
+                method: "GET"
+            )
+            drivers = response.compactMap { $0.toDriver() }
+        } catch {
+            // Keep existing drivers on failure
+        }
+    }
+
+    func fetchNearbyConvoys() async {
+        do {
+            let response: [NearbyConvoyResponse] = try await apiClient.request(
+                "/discovery/convoys",
+                method: "GET"
+            )
+            convoys = response.map { convoy in
+                Convoy(
+                    name: convoy.name,
+                    destination: convoy.destinationName ?? "",
+                    meetingPoint: "",
+                    vibe: .cruise,
+                    coordinate: userCoordinate ?? CLLocationCoordinate2D(latitude: 0, longitude: 0),
+                    memberIDs: [],
+                    isPublic: convoy.visibility == "public",
+                    etaDescription: convoy.status == "active" ? "Active now" : "Forming"
+                )
+            }
+        } catch {
+            // Keep existing convoys on failure
+        }
+    }
+
+    // MARK: - Location Updates
+
+    private func handleLocationUpdate(_ location: CLLocation) {
+        let headingValue = locationService.heading?.trueHeading ?? 0
+
+        let statusString: String = switch myStatus {
+        case .driving: "driving"
+        case .available: "parked"
+        case .convoy: "in_convoy"
+        case .meetup: "parked"
+        case .offline: "offline"
+        }
+
+        webSocketService.sendLocationUpdate(
+            location: location,
+            heading: headingValue,
+            status: statusString,
+            roadName: currentRoadName
+        )
+
+        webSocketService.sendSubscribeArea(
+            lat: location.coordinate.latitude,
+            lng: location.coordinate.longitude
+        )
+    }
+
+    private func applyDriverUpdates(_ updates: [String: DriverLocationUpdate]) {
+        for (userId, update) in updates {
+            if let index = drivers.firstIndex(where: { $0.id.uuidString.lowercased() == userId.lowercased() }) {
+                drivers[index].coordinate = CLLocationCoordinate2D(latitude: update.lat, longitude: update.lng)
+                drivers[index].status = driverStatusFromString(update.status)
+            } else {
+                // New driver from WebSocket — add with minimal info until REST refresh fills metadata
+                let driver = Driver(
+                    id: UUID(uuidString: userId) ?? UUID(),
+                    username: userId.prefix(8).description,
+                    avatarInitials: "??",
+                    vehicle: Vehicle(year: 0, make: "Unknown", model: "", trim: "", mods: [], color: .gray),
+                    status: driverStatusFromString(update.status),
+                    coordinate: CLLocationCoordinate2D(latitude: update.lat, longitude: update.lng),
+                    distanceDescription: "",
+                    interests: [],
+                    isFriend: false
+                )
+                drivers.append(driver)
+            }
+        }
+    }
+
+    private func handleDriverExited(_ userId: String) {
+        drivers.removeAll { $0.id.uuidString.lowercased() == userId.lowercased() }
+    }
+
+    private func driverStatusFromString(_ status: String) -> DriverStatus {
+        switch status {
+        case "driving": return .driving
+        case "parked", "available": return .available
+        case "in_convoy": return .convoy
+        default: return .available
+        }
+    }
+
+    func startLocationUpdates() {
+        locationUpdateTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let location = self.locationService.currentLocation else { return }
+                self.handleLocationUpdate(location)
+            }
+        }
+    }
+
+    func stopLocationUpdates() {
+        locationUpdateTimer?.invalidate()
+        locationUpdateTimer = nil
+    }
+
+    // MARK: - Computed Properties
 
     var nearbyDriverCount: Int {
         drivers.filter { $0.status != .offline }.count
@@ -54,9 +239,12 @@ final class SlipStreamViewModel: ObservableObject {
         return convoys.first { $0.id == joinedConvoyID }
     }
 
+    // MARK: - Actions
+
     func join(_ convoy: Convoy) {
         joinedConvoyID = convoy.id
         myStatus = .convoy
+        webSocketService.sendStatusChange(status: "in_convoy")
         messages.append(ChatMessage(sender: "SlipStream", text: "You joined \(convoy.name).", timestamp: "Now", isSystem: true))
     }
 
@@ -66,16 +254,18 @@ final class SlipStreamViewModel: ObservableObject {
         }
         joinedConvoyID = nil
         myStatus = .available
+        webSocketService.sendStatusChange(status: "parked")
     }
 
     func createConvoy(name: String, destination: String, meetingPoint: String, vibe: ConvoyVibe, isPublic: Bool) {
+        guard let coord = userCoordinate else { return }
         let convoy = Convoy(
             name: name.isEmpty ? "Open Cruise" : name,
             destination: destination.isEmpty ? "Set on the road" : destination,
             meetingPoint: meetingPoint.isEmpty ? "Current area" : meetingPoint,
             vibe: vibe,
-            coordinate: CLLocationCoordinate2D(latitude: myCoordinate.latitude + 0.012, longitude: myCoordinate.longitude - 0.018),
-            memberIDs: Array(drivers.prefix(2).map(\.id)),
+            coordinate: coord,
+            memberIDs: [],
             isPublic: isPublic,
             etaDescription: "Starting now"
         )
@@ -83,12 +273,15 @@ final class SlipStreamViewModel: ObservableObject {
         convoys.insert(convoy, at: 0)
         joinedConvoyID = convoy.id
         myStatus = .convoy
+        webSocketService.sendStatusChange(status: "in_convoy")
         messages.append(ChatMessage(sender: "SlipStream", text: "\(convoy.name) is live.", timestamp: "Now", isSystem: true))
     }
 
     func enterDrivingMode() {
         isDrivingMode = true
         myStatus = .driving
+        webSocketService.sendStatusChange(status: "driving")
+        startLocationUpdates()
     }
 
     func exitDrivingMode() {
@@ -97,31 +290,14 @@ final class SlipStreamViewModel: ObservableObject {
         currentRoadName = ""
         currentSpeedLimit = nil
         myStatus = .available
+        webSocketService.sendStatusChange(status: "parked")
+        stopLocationUpdates()
     }
 
-    /// Convoy members relevant for driving mode display
     var convoyDrivers: [Driver] {
         guard let joinedConvoyID else { return [] }
         guard let convoy = convoys.first(where: { $0.id == joinedConvoyID }) else { return [] }
         return drivers.filter { convoy.memberIDs.contains($0.id) }
-    }
-
-    func tickDemoLocations() {
-        for index in drivers.indices {
-            guard drivers[index].status != .offline else { continue }
-            let drift = Double(index + 1) * 0.00003
-            drivers[index].coordinate.latitude += index.isMultiple(of: 2) ? drift : -drift
-            drivers[index].coordinate.longitude += index.isMultiple(of: 2) ? -drift : drift
-        }
-
-        // Simulate driving telemetry when in driving mode
-        if isDrivingMode {
-            let speeds = [34, 37, 42, 45, 48, 52, 55, 47, 39, 44, 51, 58, 62, 56, 49]
-            currentSpeed = speeds[Int.random(in: 0..<speeds.count)]
-            currentSpeedLimit = 55
-            let roads = ["Angeles Crest Hwy", "Angeles Crest Hwy", "Angeles Crest Hwy", "CA-2", "Angeles Crest Hwy"]
-            currentRoadName = roads[Int.random(in: 0..<roads.count)]
-        }
     }
 }
 
@@ -132,106 +308,4 @@ enum MapFilter: String, CaseIterable, Identifiable {
     case meets = "Meets"
 
     var id: String { rawValue }
-}
-
-private enum DemoData {
-    static let drivers: [Driver] = [
-        Driver(
-            username: "apexkai",
-            avatarInitials: "AK",
-            vehicle: Vehicle(year: 2020, make: "Toyota", model: "Supra", trim: "3.0", mods: ["Downpipe", "E85 tune", "TE37"], color: .orange),
-            status: .driving,
-            coordinate: CLLocationCoordinate2D(latitude: 34.1490, longitude: -118.3521),
-            distanceDescription: "1.4 mi",
-            interests: ["Canyons", "Night runs"],
-            isFriend: true
-        ),
-        Driver(
-            username: "boostedmia",
-            avatarInitials: "BM",
-            vehicle: Vehicle(year: 2018, make: "BMW", model: "M2", trim: "Competition", mods: ["Akrapovic", "KW V3"], color: .blue),
-            status: .available,
-            coordinate: CLLocationCoordinate2D(latitude: 34.1197, longitude: -118.3003),
-            distanceDescription: "2.1 mi",
-            interests: ["Track days", "Cruises"],
-            isFriend: false
-        ),
-        Driver(
-            username: "canyonbrz",
-            avatarInitials: "CB",
-            vehicle: Vehicle(year: 2022, make: "Subaru", model: "BRZ", trim: "Limited", mods: ["Headers", "Ohlins", "RPF1"], color: .cyan),
-            status: .convoy,
-            coordinate: CLLocationCoordinate2D(latitude: 34.1682, longitude: -118.2743),
-            distanceDescription: "3.7 mi",
-            interests: ["Technical roads", "Photos"],
-            isFriend: true
-        ),
-        Driver(
-            username: "v8mason",
-            avatarInitials: "VM",
-            vehicle: Vehicle(year: 2019, make: "Ford", model: "Mustang", trim: "GT", mods: ["Borla", "PP2 wheels"], color: .purple),
-            status: .meetup,
-            coordinate: CLLocationCoordinate2D(latitude: 34.1013, longitude: -118.3378),
-            distanceDescription: "2.8 mi",
-            interests: ["Meets", "Drag nights"],
-            isFriend: false
-        ),
-        Driver(
-            username: "rallynoah",
-            avatarInitials: "RN",
-            vehicle: Vehicle(year: 2006, make: "Mitsubishi", model: "Evo IX", trim: "MR", mods: ["Built 4G63", "Gravel setup"], color: .green),
-            status: .driving,
-            coordinate: CLLocationCoordinate2D(latitude: 34.1879, longitude: -118.3219),
-            distanceDescription: "4.4 mi",
-            interests: ["Mountain roads", "Rally"],
-            isFriend: false
-        )
-    ]
-
-    static var convoys: [Convoy] {
-        [
-            Convoy(
-                name: "Angeles Crest Run",
-                destination: "Newcomb's Ranch",
-                meetingPoint: "Shell La Canada",
-                vibe: .canyon,
-                coordinate: CLLocationCoordinate2D(latitude: 34.2035, longitude: -118.2008),
-                memberIDs: Array(drivers.prefix(3).map(\.id)),
-                isPublic: true,
-                etaDescription: "Rolling in 12 min"
-            ),
-            Convoy(
-                name: "Late Night Downtown Loop",
-                destination: "Arts District",
-                meetingPoint: "Griffith lower lot",
-                vibe: .night,
-                coordinate: CLLocationCoordinate2D(latitude: 34.0942, longitude: -118.2391),
-                memberIDs: Array(drivers.suffix(2).map(\.id)),
-                isPublic: true,
-                etaDescription: "Active now"
-            )
-        ]
-    }
-
-    static let meetups: [MeetupSpot] = [
-        MeetupSpot(
-            name: "Griffith Pullout",
-            subtitle: "Low-key meetup forming",
-            coordinate: CLLocationCoordinate2D(latitude: 34.1292, longitude: -118.2946),
-            activeCount: 8
-        ),
-        MeetupSpot(
-            name: "Cars & Coffee Lot",
-            subtitle: "Saturday regulars nearby",
-            coordinate: CLLocationCoordinate2D(latitude: 34.1569, longitude: -118.3902),
-            activeCount: 14
-        )
-    ]
-
-    static let messages: [ChatMessage] = [
-        ChatMessage(sender: "SlipStream", text: "Angeles Crest Run lobby opened.", timestamp: "8:41", isSystem: true),
-        ChatMessage(sender: "apexkai", text: "Fueling up at the Shell now.", timestamp: "8:43"),
-        ChatMessage(sender: "canyonbrz", text: "I can lead once we hit ACH.", timestamp: "8:44"),
-        ChatMessage(sender: "boostedmia", text: "Rolling over in 5.", timestamp: "8:46")
-    ]
 }

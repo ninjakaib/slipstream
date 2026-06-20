@@ -17,17 +17,19 @@ struct MapHomeView: View {
     @Binding var selectedConvoy: Convoy?
 
     @State private var selection: MapSelection?
-    @State private var locationManager = CLLocationManager()
+    @State private var recenterTrigger: Int = 0
 
-    /// The explorer camera defaults
-    private let explorerCenter = CLLocationCoordinate2D(latitude: 34.1341, longitude: -118.3215)
+    private let defaultCenter = CLLocationCoordinate2D(latitude: 34.1341, longitude: -118.3215)
     private let explorerZoom: Double = 11.4
     private let explorerBearing: Double = -12
     private let explorerPitch: Double = 52
 
-    private let timer = Timer.publish(every: 2.5, on: .main, in: .common).autoconnect()
+    private let refreshTimer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
 
-    /// Computed camera mode based on driving state
+    private var explorerCenter: CLLocationCoordinate2D {
+        viewModel.userCoordinate ?? defaultCenter
+    }
+
     private var cameraMode: MapCameraMode {
         if viewModel.isDrivingMode {
             return .driving
@@ -52,6 +54,7 @@ struct MapHomeView: View {
                 mapFilter: viewModel.selectedMapFilter,
                 joinedConvoyID: viewModel.joinedConvoyID,
                 isDrivingMode: viewModel.isDrivingMode,
+                recenterTrigger: recenterTrigger,
                 onDriverSelected: { driver in
                     withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
                         selection = .driver(driver)
@@ -89,15 +92,16 @@ struct MapHomeView: View {
             }
         }
         .navigationBarHidden(true)
-        .onReceive(timer) { _ in
-            withAnimation(.linear(duration: 2.5)) {
-                viewModel.tickDemoLocations()
+        .onReceive(refreshTimer) { _ in
+            Task {
+                await viewModel.fetchNearbyDrivers()
             }
         }
         .onAppear {
-            if locationManager.authorizationStatus == .notDetermined {
-                locationManager.requestWhenInUseAuthorization()
-            }
+            viewModel.start()
+        }
+        .onDisappear {
+            viewModel.stop()
         }
     }
 
@@ -167,7 +171,16 @@ struct MapHomeView: View {
                 Button {
                     showingProfile = true
                 } label: {
-                    VehicleAvatar(vehicle: viewModel.myVehicle, initials: "KB", size: 44)
+                    ZStack {
+                        Circle()
+                            .fill(SlipStreamStyle.accent.gradient)
+                        Circle()
+                            .stroke(.white.opacity(0.9), lineWidth: 2)
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.black)
+                    }
+                    .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
 
@@ -226,7 +239,7 @@ struct MapHomeView: View {
 
             HStack(spacing: 10) {
                 Button {
-                    // Recenter handled by camera mode update
+                    recenterTrigger += 1
                 } label: {
                     Image(systemName: "location.fill")
                 }

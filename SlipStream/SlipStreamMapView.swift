@@ -63,6 +63,9 @@ struct SlipStreamMapView: UIViewRepresentable {
     /// Whether we're in driving mode (controls annotation density + free-drive)
     var isDrivingMode: Bool
 
+    /// Incremented to force camera recenter on user location
+    var recenterTrigger: Int = 0
+
     // MARK: Callbacks to SwiftUI
 
     var onDriverSelected: (Driver) -> Void
@@ -91,20 +94,6 @@ struct SlipStreamMapView: UIViewRepresentable {
         // Configure map style
         mapView.mapboxMap.loadStyle(.standard)
 
-        // Configure location puck
-        mapView.location.options.puckType = .puck2D(
-            Puck2DConfiguration(
-                topImage: UIImage(systemName: "location.north.fill")?
-                    .withTintColor(.white, renderingMode: .alwaysOriginal),
-                bearingImage: nil,
-                shadowImage: nil,
-                scale: .constant(1.4),
-                showsAccuracyRing: false
-            )
-        )
-        mapView.location.options.puckBearingEnabled = true
-        mapView.location.options.puckBearing = .heading
-
         // Hide default ornaments we don't need
         mapView.ornaments.scaleBarView.isHidden = true
         mapView.ornaments.logoView.isHidden = false
@@ -132,6 +121,12 @@ struct SlipStreamMapView: UIViewRepresentable {
         // Store reference
         coordinator.navigationMapView = navigationMapView
 
+        // Configure puck after map loads to ensure it isn't overridden
+        let mapLoadedToken = mapView.mapboxMap.onMapLoaded.observeNext { [weak coordinator] _ in
+            coordinator?.configurePuck()
+        }
+        coordinator.mapCancelables.append(mapLoadedToken)
+
         // Initial annotation render
         coordinator.rebuildAnnotations()
 
@@ -141,7 +136,25 @@ struct SlipStreamMapView: UIViewRepresentable {
     func updateUIView(_ navigationMapView: NavigationMapView, context: Context) {
         let coordinator = context.coordinator
         let previousMode = coordinator.currentCameraMode
+        let previousRecenter = coordinator.lastRecenterTrigger
         coordinator.parent = self
+
+        // MARK: Recenter on user location
+        if recenterTrigger != previousRecenter {
+            coordinator.lastRecenterTrigger = recenterTrigger
+            if case .explorer(let center, let zoom, let bearing, let pitch) = cameraMode {
+                navigationMapView.navigationCamera.update(cameraState: .idle)
+                navigationMapView.mapView.camera.ease(
+                    to: CameraOptions(
+                        center: center,
+                        zoom: zoom,
+                        bearing: bearing,
+                        pitch: pitch
+                    ),
+                    duration: 0.6
+                )
+            }
+        }
 
         // MARK: Camera mode transitions
         if cameraMode != previousMode {
@@ -149,11 +162,9 @@ struct SlipStreamMapView: UIViewRepresentable {
 
             switch cameraMode {
             case .driving:
-                // Transition to following — NavigationCamera animates smoothly
                 navigationMapView.navigationCamera.update(cameraState: .following)
 
             case .explorer(let center, let zoom, let bearing, let pitch):
-                // Transition back to idle — stop following, ease to explorer position
                 navigationMapView.navigationCamera.update(cameraState: .idle)
                 navigationMapView.mapView.camera.ease(
                     to: CameraOptions(
@@ -188,7 +199,9 @@ struct SlipStreamMapView: UIViewRepresentable {
         var parent: SlipStreamMapView
         var navigationMapView: NavigationMapView?
         var cancellables = Set<AnyCancellable>()
+        var mapCancelables = [Any]()
         var currentCameraMode: MapCameraMode
+        var lastRecenterTrigger: Int = 0
 
         /// The core navigation provider
         let navigationProvider: MapboxNavigationProvider
@@ -210,6 +223,14 @@ struct SlipStreamMapView: UIViewRepresentable {
 
         func startFreeDrive() {
             navigationProvider.tripSession().startFreeDrive()
+        }
+
+        func configurePuck() {
+            guard let mapView = navigationMapView?.mapView else { return }
+            let puckConfig = Puck2DConfiguration.makeDefault(showBearing: true)
+            mapView.location.options.puckType = .puck2D(puckConfig)
+            mapView.location.options.puckBearingEnabled = true
+            mapView.location.options.puckBearing = .heading
         }
 
         func subscribeToLocationMatching() {

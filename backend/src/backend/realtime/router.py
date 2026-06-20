@@ -119,7 +119,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # Set visibility in pos hash (will be created/updated on first location_update)
         pos_key = f"pos:{user_id_str}"
         await r.hset(pos_key, "visibility", visibility.value)
-        await r.expire(pos_key, 120)
+        await r.expire(pos_key, 604800)  # 7 days
     else:
         # Ghost mode — ensure they're not in the GEO set
         await r.zrem("positions:live", user_id_str)
@@ -148,10 +148,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         except asyncio.CancelledError:
             pass
 
-        # Mark user as offline but let position data expire naturally (120s TTL).
-        # This allows brief disconnects without the user vanishing from the map.
+        # Mark user as offline but preserve position data for "last seen" display.
         r = get_redis()
         await r.delete(f"presence:{user_id_str}")
+        pos_key = f"pos:{user_id_str}"
+        if await r.exists(pos_key):
+            await r.hset(pos_key, "status", "offline")
+            await r.expire(pos_key, 604800)  # 7 days
 
         # Disconnect from manager (cleans up all channel subscriptions)
         manager.disconnect(user_id)

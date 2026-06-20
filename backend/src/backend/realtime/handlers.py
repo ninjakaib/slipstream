@@ -90,8 +90,8 @@ async def handle_location_update(
             },
         )
 
-        # 3. Refresh TTL on position hash (120s — auto-expire if updates stop)
-        pipe.expire(f"pos:{user_id_str}", 120)
+        # 3. Refresh TTL on position hash (7 days — offline users remain visible)
+        pipe.expire(f"pos:{user_id_str}", 604800)
 
         # 4. Refresh presence (so actively-updating users stay visible even
         #    if heartbeat messages are delayed or lost)
@@ -146,13 +146,15 @@ async def handle_status_change(conn: UserConnection, payload: dict) -> None:
 
     r = get_redis()
     user_id_str = str(conn.user_id)
+    pos_key = f"pos:{user_id_str}"
 
     # Update status in position hash
-    await r.hset(f"pos:{user_id_str}", "status", status)
+    await r.hset(pos_key, "status", status)
 
-    # If going offline/ghost, remove from GEO set
     if status == "offline":
-        await r.zrem("positions:live", user_id_str)
+        # Keep in GEO set so offline users remain discoverable via GEOSEARCH.
+        # Position hash persists for 7 days for "last seen" display.
+        await r.expire(pos_key, 604800)  # 7 days
 
 
 # ---------------------------------------------------------------------------
@@ -226,29 +228,33 @@ async def refresh_subscriptions(
         current_location_channels = {
             ch for ch in conn.subscribed_channels if ch.startswith("location:")
         }
+        previously_known_offline = getattr(conn, "_known_offline_uids", set())
+        all_previously_visible = {
+            ch.removeprefix("location:") for ch in current_location_channels
+        } | previously_known_offline
         for channel in current_location_channels:
             mgr.unsubscribe(conn.user_id, channel)
-            target_uid = channel.removeprefix("location:")
+        for uid_str in all_previously_visible:
             await mgr.send_to_user(
                 conn.user_id,
-                {"type": "driver_exited", "payload": {"user_id": target_uid}},
+                {"type": "driver_exited", "payload": {"user_id": uid_str}},
             )
+        conn._known_offline_uids = set()
         return
 
-    # Batch fetch presence and position data via pipeline (avoid N+1 round-trips)
+    # Batch fetch position data via pipeline (avoid N+1 round-trips)
     async with r.pipeline(transaction=False) as pipe:
         for uid_str in nearby_user_ids:
-            pipe.exists(f"presence:{uid_str}")
             pipe.hgetall(f"pos:{uid_str}")
-        pipeline_results = await pipe.execute()
+        pos_results = await pipe.execute()
 
-    # Apply visibility filtering using batched results
-    visible_user_ids: set[str] = set()
-    for i, uid_str in enumerate(nearby_user_ids):
-        presence = pipeline_results[i * 2]
-        pos_data = pipeline_results[i * 2 + 1]
+    # Apply visibility filtering and split into online vs offline
+    online_user_ids: set[str] = set()
+    offline_user_ids: set[str] = set()
+    pos_data_by_uid: dict[str, dict] = {}
 
-        if not presence or not pos_data:
+    for uid_str, pos_data in zip(nearby_user_ids, pos_results):
+        if not pos_data:
             continue
 
         visibility = pos_data.get("visibility", "on")
@@ -256,7 +262,6 @@ async def refresh_subscriptions(
         if visibility == "ghost":
             continue
         elif visibility == "friends_only":
-            # Check if they're our friend
             try:
                 target_uuid = uuid.UUID(uid_str)
             except ValueError:
@@ -264,60 +269,69 @@ async def refresh_subscriptions(
             if target_uuid not in conn.friend_ids:
                 continue
 
-        visible_user_ids.add(uid_str)
+        pos_data_by_uid[uid_str] = pos_data
+        if pos_data.get("status") == "offline":
+            offline_user_ids.add(uid_str)
+        else:
+            online_user_ids.add(uid_str)
 
-    # Determine desired location channels
-    desired_channels = {f"location:{uid}" for uid in visible_user_ids}
+    # Subscribe to location channels for online users only (offline users
+    # won't be publishing, so subscribing to their channel is pointless).
+    desired_channels = {f"location:{uid}" for uid in online_user_ids}
 
-    # Current location channels (exclude convoy channels)
     current_location_channels = {
         ch for ch in conn.subscribed_channels if ch.startswith("location:")
     }
 
-    # New channels to subscribe
     new_channels = desired_channels - current_location_channels
-    # Old channels to unsubscribe
     old_channels = current_location_channels - desired_channels
 
-    # Subscribe to new
     for channel in new_channels:
         mgr.subscribe(conn.user_id, channel)
 
-    # Unsubscribe from old
     for channel in old_channels:
         mgr.unsubscribe(conn.user_id, channel)
 
-    # Send driver_entered for newly visible users
-    for channel in new_channels:
-        target_uid = channel.removeprefix("location:")
-        pos_data = await r.hgetall(f"pos:{target_uid}")
-        if pos_data:
-            await mgr.send_to_user(
-                conn.user_id,
-                {
-                    "type": "driver_entered",
-                    "payload": {
-                        "user_id": target_uid,
-                        "lat": float(pos_data.get("lat", 0)),
-                        "lng": float(pos_data.get("lng", 0)),
-                        "heading": float(pos_data.get("heading", 0)),
-                        "speed": float(pos_data.get("speed", 0)),
-                        "status": pos_data.get("status", "driving"),
-                        "road_name": pos_data.get("road_name", ""),
-                    },
-                },
-            )
+    # Track which users the client already knows about (online + offline)
+    previously_visible = {
+        ch.removeprefix("location:") for ch in current_location_channels
+    } | getattr(conn, "_known_offline_uids", set())
 
-    # Send driver_exited for users no longer visible
-    for channel in old_channels:
-        target_uid = channel.removeprefix("location:")
+    all_visible = online_user_ids | offline_user_ids
+    newly_visible = all_visible - previously_visible
+    no_longer_visible = previously_visible - all_visible
+
+    # Send driver_entered for newly visible users (online and offline)
+    for uid_str in newly_visible:
+        pos_data = pos_data_by_uid.get(uid_str)
+        if not pos_data:
+            continue
         await mgr.send_to_user(
             conn.user_id,
             {
-                "type": "driver_exited",
-                "payload": {"user_id": target_uid},
+                "type": "driver_entered",
+                "payload": {
+                    "user_id": uid_str,
+                    "lat": float(pos_data.get("lat", 0)),
+                    "lng": float(pos_data.get("lng", 0)),
+                    "heading": float(pos_data.get("heading", 0)),
+                    "speed": float(pos_data.get("speed", 0)),
+                    "status": pos_data.get("status", "driving"),
+                    "road_name": pos_data.get("road_name", ""),
+                    "updated_at": int(pos_data.get("updated_at", 0)),
+                },
             },
         )
+
+    # Send driver_exited for users no longer visible
+    for uid_str in no_longer_visible:
+        await mgr.send_to_user(
+            conn.user_id,
+            {"type": "driver_exited", "payload": {"user_id": uid_str}},
+        )
+
+    # Track offline users so we can diff them on next refresh
+    conn._known_offline_uids = offline_user_ids
 
 
 # ---------------------------------------------------------------------------
