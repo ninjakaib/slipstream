@@ -97,8 +97,14 @@ export function LiveMap({ drivers, onCellsChanged, onDriverSelected }: LiveMapPr
           return "off";
         });
       }
+      const { bounds, zoom } = state.properties;
+      const viewportBounds: ViewportBounds = {
+        ne: bounds.ne as [number, number],
+        sw: bounds.sw as [number, number],
+      };
+      handleCameraChanged(viewportBounds, zoom);
     },
-    [animateExpand],
+    [animateExpand, handleCameraChanged],
   );
 
   // Cycle: off → follow → followHeading → off
