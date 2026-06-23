@@ -15,26 +15,27 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
+          sf={{ default: "house", selected: "house.fill" }}
           src={require('@/assets/images/tabIcons/home.png')}
-          renderingMode="template"
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="map">
         <NativeTabs.Trigger.Label>Map</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
+          sf={{ default: "map", selected: "map.fill" }}
           src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="explore">
         <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
+          sf={{ default: "magnifyingglass", selected: "magnifyingglass" }}
           src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
         />
       </NativeTabs.Trigger>
+
     </NativeTabs>
   );
 }

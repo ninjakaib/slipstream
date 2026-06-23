@@ -9,7 +9,7 @@
  * as the user pans/zooms.
  */
 import { useCallback, useMemo, useRef, useState } from "react";
-import { StyleSheet } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import Mapbox, {
   Camera,
   Images,
@@ -19,6 +19,7 @@ import Mapbox, {
   SymbolLayer,
   UserTrackingMode,
 } from "@rnmapbox/maps";
+import { SymbolView } from "expo-symbols";
 
 import { useViewportCells } from "@/hooks/use-viewport-cells";
 import type { DriverData } from "@/hooks/use-websocket";
@@ -99,47 +100,66 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
     [handleCameraChanged],
   );
 
+  const handleLocateMe = useCallback(() => {
+    setFollowUser(true);
+  }, []);
+
   return (
-    <MapView
-      ref={mapRef}
-      style={styles.map}
-      styleURL="mapbox://styles/mapbox/dark-v11"
-      logoEnabled={false}
-      compassEnabled={false}
-      scaleBarEnabled={false}
-      onMapIdle={onMapIdle}
-      onPress={handleMapPress}
-    >
-      <Camera
-        defaultSettings={{
-          centerCoordinate: [...DEFAULT_CAMERA.centerCoordinate],
-          zoomLevel: DEFAULT_CAMERA.zoomLevel,
-        }}
-        followUserLocation={followUser}
-        followUserMode={UserTrackingMode.Follow}
-        followZoomLevel={14}
-      />
-
-      <LocationPuck
-        visible={true}
-        puckBearingEnabled={true}
-        puckBearing="heading"
-        pulsing={{
-          isEnabled: true,
-          color: "rgba(87, 199, 255, 0.4)",
-          radius: "accuracy",
-        }}
-      />
-
-      <Images images={{ "driver-arrow": DRIVER_ARROW_ICON }} />
-
-      <ShapeSource id="drivers" shape={geoJSON}>
-        <SymbolLayer
-          id="drivers-layer"
-          style={symbolStyle}
+    <View style={styles.container}>
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        styleURL="mapbox://styles/mapbox/dark-v11"
+        logoEnabled={false}
+        compassEnabled={false}
+        scaleBarEnabled={false}
+        onMapIdle={onMapIdle}
+        onPress={handleMapPress}
+      >
+        <Camera
+          defaultSettings={{
+            centerCoordinate: [...DEFAULT_CAMERA.centerCoordinate],
+            zoomLevel: DEFAULT_CAMERA.zoomLevel,
+          }}
+          followUserLocation={followUser}
+          followUserMode={UserTrackingMode.Follow}
+          followZoomLevel={14}
         />
-      </ShapeSource>
-    </MapView>
+
+        <LocationPuck
+          visible={true}
+          puckBearingEnabled={true}
+          puckBearing="heading"
+          pulsing={{
+            isEnabled: true,
+            color: "rgba(87, 199, 255, 0.4)",
+            radius: "accuracy",
+          }}
+        />
+
+        <Images images={{ "driver-arrow": DRIVER_ARROW_ICON }} />
+
+        <ShapeSource id="drivers" shape={geoJSON}>
+          <SymbolLayer
+            id="drivers-layer"
+            style={symbolStyle}
+          />
+        </ShapeSource>
+      </MapView>
+
+      <Pressable
+        style={[styles.locateButton, followUser && styles.locateButtonActive]}
+        onPress={handleLocateMe}
+        accessibilityLabel="Center map on my location"
+        accessibilityRole="button"
+      >
+        <SymbolView
+          name="location.fill"
+          tintColor={followUser ? "#007AFF" : "#ffffff"}
+          size={22}
+        />
+      </Pressable>
+    </View>
   );
 }
 
@@ -153,7 +173,28 @@ const symbolStyle = {
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   map: {
     flex: 1,
+  },
+  locateButton: {
+    position: "absolute",
+    bottom: 110,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(30, 30, 30, 0.85)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  locateButtonActive: {
+    backgroundColor: "rgba(0, 122, 255, 0.15)",
   },
 });
