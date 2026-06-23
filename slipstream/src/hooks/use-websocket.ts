@@ -36,10 +36,19 @@ interface WebSocketMessage {
   payload?: Record<string, unknown>;
 }
 
+export interface LocationPayload {
+  lat: number;
+  lng: number;
+  heading: number;
+  speed: number;
+  status?: string;
+}
+
 interface UseWebSocketResult {
   drivers: Record<string, DriverData>;
   status: ConnectionStatus;
   sendViewportUpdate: (cells: string[]) => void;
+  sendLocationUpdate: (location: LocationPayload) => void;
   stats: WebSocketStats;
 }
 
@@ -222,6 +231,26 @@ export function useWebSocket(
     }
   }, []);
 
+  /**
+   * Send the user's current location to the server.
+   */
+  const sendLocationUpdate = useCallback((location: LocationPayload) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: "location_update",
+          payload: {
+            lat: location.lat,
+            lng: location.lng,
+            heading: location.heading,
+            speed: location.speed,
+            status: location.status ?? "driving",
+          },
+        }),
+      );
+    }
+  }, []);
+
   // Connect when token becomes available
   useEffect(() => {
     if (token && serverUrl) {
@@ -245,5 +274,5 @@ export function useWebSocket(
     };
   }, []);
 
-  return { drivers, status, sendViewportUpdate, stats };
+  return { drivers, status, sendViewportUpdate, sendLocationUpdate, stats };
 }

@@ -8,14 +8,16 @@
  * Subscribes to the spatial WebSocket and updates viewport cells
  * as the user pans/zooms.
  */
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
 import Mapbox, {
   Camera,
   Images,
+  LocationPuck,
   MapView,
   ShapeSource,
   SymbolLayer,
+  UserTrackingMode,
 } from "@rnmapbox/maps";
 
 import { useViewportCells } from "@/hooks/use-viewport-cells";
@@ -69,6 +71,11 @@ const DEFAULT_CAMERA = {
 export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
   const mapRef = useRef<MapView>(null);
   const { handleCameraChanged } = useViewportCells(onCellsChanged);
+  const [followUser, setFollowUser] = useState(true);
+
+  const handleMapPress = useCallback(() => {
+    setFollowUser(false);
+  }, []);
 
   const geoJSON = useMemo(() => driversToGeoJSON(drivers), [drivers]);
 
@@ -101,11 +108,26 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
       compassEnabled={false}
       scaleBarEnabled={false}
       onMapIdle={onMapIdle}
+      onPress={handleMapPress}
     >
       <Camera
         defaultSettings={{
           centerCoordinate: [...DEFAULT_CAMERA.centerCoordinate],
           zoomLevel: DEFAULT_CAMERA.zoomLevel,
+        }}
+        followUserLocation={followUser}
+        followUserMode={UserTrackingMode.Follow}
+        followZoomLevel={14}
+      />
+
+      <LocationPuck
+        visible={true}
+        puckBearingEnabled={true}
+        puckBearing="heading"
+        pulsing={{
+          isEnabled: true,
+          color: "rgba(87, 199, 255, 0.4)",
+          radius: "accuracy",
         }}
       />
 
