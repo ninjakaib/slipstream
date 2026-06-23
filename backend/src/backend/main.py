@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 
 from backend.config import settings
 from backend.routers.auth import router as auth_router
@@ -47,10 +48,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("SlipStream shut down.")
 
 
+def _generate_unique_id(route: APIRoute) -> str:
+    """Generate operation IDs as 'tag-function_name' for clean SDK method names."""
+    if route.tags:
+        return f"{route.tags[0]}-{route.name}"
+    return route.name
+
+
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
     description="Real-time social driving network for car enthusiasts.",
+    generate_unique_id_function=_generate_unique_id,
     # lifespan=lifespan,
 )
 

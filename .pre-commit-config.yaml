@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: sync-api
+        name: Sync OpenAPI spec and TypeScript SDK
+        entry: bash -c 'make sync-api && git add openapi.json slipstream/src/lib/api/'
+        language: system
+        files: ^backend/src/backend/(routers/|models\.py|main\.py|dependencies\.py)
+        pass_filenames: false
