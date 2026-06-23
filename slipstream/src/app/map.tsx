@@ -8,17 +8,19 @@
 import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { useAuth } from "@/contexts/auth-context";
 import { LiveMap } from "@/features/map/live-map";
 import { useLocation } from "@/hooks/use-location";
 import { useWebSocket } from "@/hooks/use-websocket";
 
-// TODO: Replace with actual auth flow and dynamic server URL
 const SERVER_URL = process.env.EXPO_PUBLIC_WS_URL ?? null;
-const TOKEN = process.env.EXPO_PUBLIC_DEV_TOKEN ?? null;
 
 export default function MapScreen() {
+  const { session } = useAuth();
+  const token = session?.accessToken ?? null;
+
   const { drivers, status, sendViewportUpdate, sendLocationUpdate } =
-    useWebSocket(SERVER_URL, TOKEN);
+    useWebSocket(SERVER_URL, token);
 
   useLocation({
     onLocationUpdate: sendLocationUpdate,

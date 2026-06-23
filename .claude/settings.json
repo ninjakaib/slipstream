@@ -1,8 +1,9 @@
 {
   "enabledPlugins": {
     "mapbox@claude-plugins-official": true,
-    "swift-concurrency-pro@swift-concurrency-agent-skill": true,
-    "swiftui-pro@swiftui-agent-skill": true,
-    "swift-lsp@claude-plugins-official": true
+    "swift-concurrency-pro@swift-concurrency-agent-skill": false,
+    "swiftui-pro@swiftui-agent-skill": false,
+    "swift-lsp@claude-plugins-official": false,
+    "expo@claude-plugins-official": true
   }
 }
