@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
 import Mapbox, {
   Camera,
+  CircleLayer,
   Images,
   LocationPuck,
   MapView,
@@ -25,6 +26,7 @@ const DRIVER_ARROW_ICON = require("@/assets/images/driver-arrow.png");
 interface LiveMapProps {
   drivers: Record<string, DriverData>;
   onCellsChanged: (cells: string[], resolution: number) => void;
+  onDriverSelected?: (userId: string) => void;
 }
 
 function driversToGeoJSON(
@@ -66,7 +68,7 @@ const DEFAULT_CAMERA = {
 // driving: racing cam — follows course, high pitch, close zoom
 type TrackingState = "off" | "follow" | "followHeading" | "driving";
 
-export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
+export function LiveMap({ drivers, onCellsChanged, onDriverSelected }: LiveMapProps) {
   const mapRef = useRef<MapView>(null);
   const { handleCameraChanged } = useViewportCells(onCellsChanged);
   const [tracking, setTracking] = useState<TrackingState>("off");
@@ -123,6 +125,15 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
     });
   }, [animateExpand]);
 
+  const handleDriverPress = useCallback(
+    (event: { features: Array<GeoJSON.Feature> }) => {
+      const feature = event.features?.[0];
+      const userId = feature?.properties?.user_id as string | undefined;
+      if (userId) onDriverSelected?.(userId);
+    },
+    [onDriverSelected],
+  );
+
   const geoJSON = useMemo(() => driversToGeoJSON(drivers), [drivers]);
 
   const onMapIdle = useCallback(
@@ -152,7 +163,7 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
   })();
 
   const followPitch = isDriving ? 75 : show3d ? 50 : 0;
-  const followZoom = isDriving ? 17.5 : 15;
+  const followZoom = isDriving ? 17.5 : 13.5;
 
   const lightPreset = useMemo(() => getLightPreset(), []);
 
@@ -220,8 +231,9 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
 
         <Images images={{ "driver-arrow": DRIVER_ARROW_ICON }} />
 
-        <ShapeSource id="drivers" shape={geoJSON}>
-          <SymbolLayer id="drivers-layer" style={symbolStyle} />
+        <ShapeSource id="drivers" shape={geoJSON} onPress={handleDriverPress} hitbox={{ width: 44, height: 44 }}>
+          <CircleLayer id="drivers-circle" style={circleStyle} />
+          <SymbolLayer id="drivers-arrow" style={symbolStyle} />
         </ShapeSource>
       </MapView>
 
@@ -281,9 +293,17 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
   );
 }
 
+const circleStyle = {
+  circleRadius: 16,
+  circleColor: "#007AFF",
+  circleStrokeWidth: 2,
+  circleStrokeColor: "#ffffff",
+  circleOpacity: 0.9,
+};
+
 const symbolStyle = {
   iconImage: "driver-arrow",
-  iconSize: 0.4,
+  iconSize: 0.3,
   iconRotate: ["get", "heading"] as unknown as number,
   iconRotationAlignment: "map" as const,
   iconAllowOverlap: true,

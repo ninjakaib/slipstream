@@ -7,9 +7,11 @@
  */
 import { useCallback, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
+
 import { SymbolView } from "expo-symbols";
 
 import { useAuth } from "@/contexts/auth-context";
+import { DriverSheet } from "@/features/map/driver-sheet";
 import { LiveMap } from "@/features/map/live-map";
 import ProfileScreen from "@/features/profile/profile-screen";
 import { useLocation } from "@/hooks/use-location";
@@ -31,6 +33,7 @@ export default function MapScreen() {
 
   const [currentResolution, setCurrentResolution] = useState(0);
   const [profileVisible, setProfileVisible] = useState(false);
+  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
 
   const handleCellsChanged = useCallback(
     (cells: string[], resolution: number) => {
@@ -42,7 +45,11 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      <LiveMap drivers={drivers} onCellsChanged={handleCellsChanged} />
+      <LiveMap
+        drivers={drivers}
+        onCellsChanged={handleCellsChanged}
+        onDriverSelected={setSelectedDriverId}
+      />
 
       {/* Avatar — opens profile sheet */}
       <Pressable
@@ -69,6 +76,13 @@ export default function MapScreen() {
           ]}
         />
       </View>
+
+      {selectedDriverId && (
+        <DriverSheet
+          userId={selectedDriverId}
+          onClose={() => setSelectedDriverId(null)}
+        />
+      )}
 
       <Modal
         visible={profileVisible}
