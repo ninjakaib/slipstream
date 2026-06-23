@@ -6,7 +6,7 @@
  *
  * Ported from demo/src/lib/spatial.js for React Native / TypeScript.
  */
-import { polygonToCells } from "h3-js";
+import { polygonToCellsExperimental, POLYGON_TO_CELLS_FLAGS } from "h3-js";
 
 /**
  * Supported H3 resolutions (must match the server's INDEX_RESOLUTIONS).
@@ -68,7 +68,7 @@ export function getViewportCells(
   ];
 
   try {
-    const cells = polygonToCells([ring], resolution);
+    const cells = polygonToCellsExperimental([ring], resolution, POLYGON_TO_CELLS_FLAGS.containmentOverlapping);
     return { cells: cells.slice(0, MAX_VIEWPORT_CELLS), resolution };
   } catch (e) {
     console.warn("H3 polygonToCells failed:", e);
