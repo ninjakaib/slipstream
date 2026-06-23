@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Animated, Pressable, StyleSheet, View } from "react-native";
 import Mapbox, {
   Camera,
   Images,
@@ -10,6 +10,7 @@ import Mapbox, {
   SymbolLayer,
   UserTrackingMode,
 } from "@rnmapbox/maps";
+import type { MapState } from "@rnmapbox/maps";
 import { SymbolView } from "expo-symbols";
 import { GlassView } from "expo-glass-effect";
 
@@ -59,25 +60,43 @@ const DEFAULT_CAMERA = {
   zoomLevel: 10.5,
 } as const;
 
-// off: not tracking, arrow outline
-// follow: tracking location, filled arrow
-// followHeading: tracking location + bearing, compass arrow
-type TrackingState = "off" | "follow" | "followHeading";
+// off: not tracking (outline arrow)
+// follow: tracking location (filled arrow)
+// followHeading: tracking location + device compass heading (compass arrow)
+// driving: racing cam — follows course, high pitch, close zoom
+type TrackingState = "off" | "follow" | "followHeading" | "driving";
 
 export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
   const mapRef = useRef<MapView>(null);
   const { handleCameraChanged } = useViewportCells(onCellsChanged);
   const [tracking, setTracking] = useState<TrackingState>("off");
   const [show3d, setShow3d] = useState(false);
+  const expandAnim = useRef(new Animated.Value(1)).current;
 
-  // Any user gesture on the map resets tracking to off
+  const animateExpand = useCallback(
+    (expanded: boolean) => {
+      Animated.spring(expandAnim, {
+        toValue: expanded ? 1 : 0,
+        useNativeDriver: true,
+        tension: 200,
+        friction: 20,
+      }).start();
+    },
+    [expandAnim],
+  );
+
   const handleCameraUpdate = useCallback(
-    (state: { gestures: { isGestureActive: boolean } }) => {
+    (state: MapState) => {
       if (state.gestures.isGestureActive) {
-        setTracking("off");
+        setTracking((prev) => {
+          if (prev === "driving") {
+            animateExpand(true);
+          }
+          return "off";
+        });
       }
     },
-    [],
+    [animateExpand],
   );
 
   // Cycle: off → follow → followHeading → off
@@ -93,18 +112,21 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
     setShow3d((prev) => !prev);
   }, []);
 
+  const handleDrivingPress = useCallback(() => {
+    setTracking((prev) => {
+      if (prev === "driving") {
+        animateExpand(true);
+        return "off";
+      }
+      animateExpand(false);
+      return "driving";
+    });
+  }, [animateExpand]);
+
   const geoJSON = useMemo(() => driversToGeoJSON(drivers), [drivers]);
 
   const onMapIdle = useCallback(
-    (state: {
-      properties: {
-        center: GeoJSON.Position;
-        bounds: { ne: GeoJSON.Position; sw: GeoJSON.Position };
-        zoom: number;
-        heading: number;
-        pitch: number;
-      };
-    }) => {
+    (state: MapState) => {
       const { bounds, zoom } = state.properties;
       const viewportBounds: ViewportBounds = {
         ne: bounds.ne as [number, number],
@@ -115,10 +137,22 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
     [handleCameraChanged],
   );
 
-  const followUserMode =
-    tracking === "followHeading"
-      ? UserTrackingMode.FollowWithHeading
-      : UserTrackingMode.Follow;
+  const isDriving = tracking === "driving";
+  const isFollowing = tracking !== "off";
+
+  const followUserMode = (() => {
+    switch (tracking) {
+      case "followHeading":
+        return UserTrackingMode.FollowWithHeading;
+      case "driving":
+        return UserTrackingMode.FollowWithCourse;
+      default:
+        return UserTrackingMode.Follow;
+    }
+  })();
+
+  const followPitch = isDriving ? 65 : show3d ? 50 : 0;
+  const followZoom = isDriving ? 17.5 : 15;
 
   const lightPreset = useMemo(() => getLightPreset(), []);
 
@@ -128,6 +162,21 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
       : tracking === "follow"
         ? "location.fill"
         : "location";
+
+  const otherButtonsStyle = {
+    opacity: expandAnim,
+    transform: [
+      {
+        scaleY: expandAnim,
+      },
+      {
+        translateY: expandAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [44, 0],
+        }),
+      },
+    ],
+  };
 
   return (
     <View style={styles.container}>
@@ -146,7 +195,7 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
           existing
           config={{
             lightPreset,
-            show3dObjects: show3d ? "true" : "false",
+            show3dObjects: isDriving || show3d ? "true" : "false",
           }}
         />
 
@@ -156,19 +205,20 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
             zoomLevel: DEFAULT_CAMERA.zoomLevel,
           }}
           pitch={show3d ? 50 : 0}
-          followUserLocation={tracking !== "off"}
+          followUserLocation={isFollowing}
           followUserMode={followUserMode}
-          followZoomLevel={15}
-          followPitch={show3d ? 50 : 0}
-          animationDuration={500}
+          followZoomLevel={followZoom}
+          followPitch={followPitch}
+          animationDuration={isDriving ? 300 : 500}
+          
         />
 
         <LocationPuck
           visible={true}
           puckBearingEnabled={true}
-          puckBearing="heading"
+          puckBearing={isDriving ? "course" : "heading"}
           pulsing={{
-            isEnabled: true,
+            isEnabled: !isDriving,
             color: "rgba(0, 122, 255, 0.25)",
             radius: "accuracy",
           }}
@@ -181,35 +231,53 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
         </ShapeSource>
       </MapView>
 
-      {/* Map control buttons — liquid glass, Apple Maps style */}
+      {/* Map control buttons — liquid glass */}
       <View style={styles.controlStack}>
         <GlassView style={styles.glassContainer} glassEffectStyle="regular">
-          {/* 3D toggle */}
+          <Animated.View style={otherButtonsStyle}>
+            {/* 3D toggle */}
+            <Pressable
+              style={styles.controlButton}
+              onPress={handle3dPress}
+              accessibilityLabel={show3d ? "Disable 3D" : "Enable 3D"}
+              accessibilityRole="button"
+            >
+              <SymbolView
+                name={show3d ? "building.2.fill" : "building.2"}
+                tintColor={show3d ? "#007AFF" : "#FFFFFF"}
+                size={20}
+              />
+            </Pressable>
+
+            <View style={styles.separator} />
+
+            {/* Location tracking */}
+            <Pressable
+              style={styles.controlButton}
+              onPress={handleLocatePress}
+              accessibilityLabel="Track my location"
+              accessibilityRole="button"
+            >
+              <SymbolView
+                name={locationIcon}
+                tintColor={isFollowing && !isDriving ? "#007AFF" : "#FFFFFF"}
+                size={20}
+              />
+            </Pressable>
+
+            <View style={styles.separator} />
+          </Animated.View>
+
+          {/* Driving mode */}
           <Pressable
             style={styles.controlButton}
-            onPress={handle3dPress}
-            accessibilityLabel={show3d ? "Disable 3D" : "Enable 3D"}
+            onPress={handleDrivingPress}
+            accessibilityLabel={isDriving ? "Exit driving mode" : "Enter driving mode"}
             accessibilityRole="button"
           >
             <SymbolView
-              name={show3d ? "building.2.fill" : "building.2"}
-              tintColor={show3d ? "#007AFF" : "#1C1C1E"}
-              size={20}
-            />
-          </Pressable>
-
-          <View style={styles.separator} />
-
-          {/* Location tracking */}
-          <Pressable
-            style={styles.controlButton}
-            onPress={handleLocatePress}
-            accessibilityLabel="Track my location"
-            accessibilityRole="button"
-          >
-            <SymbolView
-              name={locationIcon}
-              tintColor={tracking !== "off" ? "#007AFF" : "#1C1C1E"}
+              name={isDriving ? "car.side.fill" : "car.side"}
+              tintColor={isDriving ? "#007AFF" : "#FFFFFF"}
               size={20}
             />
           </Pressable>
@@ -252,7 +320,7 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "rgba(0, 0, 0, 0.15)",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     marginHorizontal: 8,
   },
 });
