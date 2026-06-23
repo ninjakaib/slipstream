@@ -10,10 +10,7 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql+asyncpg://postgres:postgres@localhost:5432/slipstream"
     )
-
-    # Redis
-    redis_url: str = "redis://localhost:6379/0"
-
+    
     # JWT
     jwt_secret_key: str = "CHANGE-ME-IN-PRODUCTION"
     jwt_algorithm: str = "HS256"

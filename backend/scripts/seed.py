@@ -4,7 +4,7 @@ Usage:
     cd backend
     uv run python scripts/seed.py
 
-Requires the server's Docker Compose services (postgres, redis) to be running.
+Requires the server's Docker Compose services (postgres) to be running.
 """
 
 import asyncio
@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 
 # -- Adjust these if your .env differs --
 DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/slipstream"
-REDIS_URL = "redis://localhost:6379/0"
 
 # Test users: (username, display_name, visibility)
 TEST_USERS = [
@@ -35,16 +34,86 @@ TEST_USERS = [
 
 # Car data per user
 TEST_CARS = [
-    {"year": 2020, "make": "Toyota", "model": "Supra", "trim": "3.0 Premium", "color": "#FF6600", "mods": ["catback exhaust", "downpipe", "tune"]},
-    {"year": 2019, "make": "Honda", "model": "Civic Type R", "trim": "FK8", "color": "#FFFFFF", "mods": ["coilovers", "front lip"]},
-    {"year": 2022, "make": "Subaru", "model": "WRX", "trim": "STI", "color": "#003399", "mods": ["cold air intake", "accessport"]},
-    {"year": 2018, "make": "Nissan", "model": "370Z", "trim": "Nismo", "color": "#CC0000", "mods": ["headers", "test pipes"]},
-    {"year": 2021, "make": "Ford", "model": "Mustang", "trim": "GT", "color": "#333333", "mods": ["long tube headers", "supercharger"]},
-    {"year": 2023, "make": "BMW", "model": "M3", "trim": "Competition", "color": "#1E90FF", "mods": ["carbon fiber hood"]},
-    {"year": 1995, "make": "Mazda", "model": "RX-7", "trim": "FD", "color": "#FFCC00", "mods": ["single turbo conversion", "standalone ECU"]},
-    {"year": 2020, "make": "Honda", "model": "Civic Si", "trim": None, "color": "#8B0000", "mods": ["hondata", "exhaust"]},
-    {"year": 2022, "make": "Porsche", "model": "911", "trim": "GT3", "color": "#C0C0C0", "mods": []},
-    {"year": 2017, "make": "Mitsubishi", "model": "Lancer", "trim": "Evo X", "color": "#FFFFFF", "mods": ["big turbo", "intercooler", "tune"]},
+    {
+        "year": 2020,
+        "make": "Toyota",
+        "model": "Supra",
+        "trim": "3.0 Premium",
+        "color": "#FF6600",
+        "mods": ["catback exhaust", "downpipe", "tune"],
+    },
+    {
+        "year": 2019,
+        "make": "Honda",
+        "model": "Civic Type R",
+        "trim": "FK8",
+        "color": "#FFFFFF",
+        "mods": ["coilovers", "front lip"],
+    },
+    {
+        "year": 2022,
+        "make": "Subaru",
+        "model": "WRX",
+        "trim": "STI",
+        "color": "#003399",
+        "mods": ["cold air intake", "accessport"],
+    },
+    {
+        "year": 2018,
+        "make": "Nissan",
+        "model": "370Z",
+        "trim": "Nismo",
+        "color": "#CC0000",
+        "mods": ["headers", "test pipes"],
+    },
+    {
+        "year": 2021,
+        "make": "Ford",
+        "model": "Mustang",
+        "trim": "GT",
+        "color": "#333333",
+        "mods": ["long tube headers", "supercharger"],
+    },
+    {
+        "year": 2023,
+        "make": "BMW",
+        "model": "M3",
+        "trim": "Competition",
+        "color": "#1E90FF",
+        "mods": ["carbon fiber hood"],
+    },
+    {
+        "year": 1995,
+        "make": "Mazda",
+        "model": "RX-7",
+        "trim": "FD",
+        "color": "#FFCC00",
+        "mods": ["single turbo conversion", "standalone ECU"],
+    },
+    {
+        "year": 2020,
+        "make": "Honda",
+        "model": "Civic Si",
+        "trim": None,
+        "color": "#8B0000",
+        "mods": ["hondata", "exhaust"],
+    },
+    {
+        "year": 2022,
+        "make": "Porsche",
+        "model": "911",
+        "trim": "GT3",
+        "color": "#C0C0C0",
+        "mods": [],
+    },
+    {
+        "year": 2017,
+        "make": "Mitsubishi",
+        "model": "Lancer",
+        "trim": "Evo X",
+        "color": "#FFFFFF",
+        "mods": ["big turbo", "intercooler", "tune"],
+    },
 ]
 
 # Los Angeles area coordinates for test positions
@@ -65,8 +134,16 @@ LA_POSITIONS = [
 async def main() -> None:
     from backend.auth import hash_password, create_access_token
     from backend.models import (
-        Base, User, Car, Friendship, FriendshipStatus,
-        Convoy, ConvoyMember, ConvoyMemberRole, ConvoyStatus, ConvoyVisibility,
+        Base,
+        User,
+        Car,
+        Friendship,
+        FriendshipStatus,
+        Convoy,
+        ConvoyMember,
+        ConvoyMemberRole,
+        ConvoyStatus,
+        ConvoyVisibility,
     )
 
     engine = create_async_engine(DATABASE_URL, echo=False)
@@ -82,14 +159,20 @@ async def main() -> None:
         result = await db.execute(select(User).where(User.username == "apexkai"))
         if result.scalar_one_or_none():
             print("⚠️  Database already seeded. Drop tables or skip.")
-            print("   To reset: docker compose exec postgres psql -U postgres -d slipstream -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'")
-            print("   Then re-run migrations: docker compose exec api alembic upgrade head")
+            print(
+                "   To reset: docker compose exec postgres psql -U postgres -d slipstream -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'"
+            )
+            print(
+                "   Then re-run migrations: docker compose exec api alembic upgrade head"
+            )
             await engine.dispose()
             return
 
         # -- Create users --
         users: list[User] = []
-        for (username, display_name, visibility), car_data in zip(TEST_USERS, TEST_CARS):
+        for (username, display_name, visibility), car_data in zip(
+            TEST_USERS, TEST_CARS
+        ):
             user = User(
                 username=username,
                 display_name=display_name,
@@ -119,12 +202,20 @@ async def main() -> None:
 
         # -- Create friendships (make a connected group) --
         friendship_pairs = [
-            (0, 1), (0, 2), (0, 3), (0, 4),  # apexkai friends with first 5
-            (1, 2), (1, 3), (1, 5),            # boostedmia friends
-            (2, 4), (2, 5),                    # rallynoah friends
-            (3, 8),                            # driftqueen + flatsixter
-            (4, 5), (4, 6),                    # canyoncarver friends
-            (7, 8), (7, 9),                    # vtecliz friends
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),  # apexkai friends with first 5
+            (1, 2),
+            (1, 3),
+            (1, 5),  # boostedmia friends
+            (2, 4),
+            (2, 5),  # rallynoah friends
+            (3, 8),  # driftqueen + flatsixter
+            (4, 5),
+            (4, 6),  # canyoncarver friends
+            (7, 8),
+            (7, 9),  # vtecliz friends
         ]
 
         for i, j in friendship_pairs:
@@ -213,52 +304,10 @@ curl http://localhost:8000/cars \\
   -H "Authorization: Bearer {token}"
 """)
 
-    # -- Seed Redis with live positions --
-    import redis.asyncio as aioredis
-
-    r = aioredis.from_url(REDIS_URL, decode_responses=True)
-
-    print("=" * 60)
-    print("SEEDING REDIS (live positions)")
-    print("=" * 60)
-
-    import time
-    now = int(time.time())
-
-    async with r.pipeline(transaction=False) as pipe:
-        for user, (lat, lng, road) in zip(users, LA_POSITIONS):
-            user_id_str = str(user.id)
-            # Skip ghost users
-            if user.visibility == "ghost":
-                continue
-
-            speed = random.randint(25, 75)
-            heading = random.uniform(0, 360)
-
-            pipe.geoadd("positions:live", (lng, lat, user_id_str))
-            pipe.hset(f"pos:{user_id_str}", mapping={
-                "lat": str(lat),
-                "lng": str(lng),
-                "heading": str(round(heading, 1)),
-                "speed": str(speed),
-                "status": "driving",
-                "road_name": road,
-                "visibility": user.visibility,
-                "updated_at": str(now),
-            })
-            pipe.expire(f"pos:{user_id_str}", 300)  # 5 min TTL for seed data
-            pipe.set(f"presence:{user_id_str}", "online", ex=300)
-
-        await pipe.execute()
-
-    print(f"✅ Seeded {len(users) - 1} live positions in Redis (skipped ghost users)")
-    print(f"\n🎉 Seeding complete! Your backend is ready to test.")
-
-    await r.aclose()
-    await engine.dispose()
 
 
 if __name__ == "__main__":
     import sys
+
     sys.path.insert(0, "src")
     asyncio.run(main())

@@ -8,7 +8,6 @@ Run with:
 import asyncio
 import uuid
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -72,19 +71,9 @@ async def client(db_engine) -> AsyncGenerator[AsyncClient, None]:
 
     app.dependency_overrides[get_db] = override_get_db
 
-    # Mock Redis to avoid needing a real Redis instance
-    mock_redis = AsyncMock()
-    mock_redis.geoadd = AsyncMock(return_value=1)
-    mock_redis.hset = AsyncMock(return_value=1)
-    mock_redis.expire = AsyncMock(return_value=True)
-    mock_redis.set = AsyncMock(return_value=True)
-    mock_redis.publish = AsyncMock(return_value=1)
-    mock_redis.pipeline = AsyncMock()
-
-    with patch("backend.redis.get_redis", return_value=mock_redis):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            yield ac
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
 
     app.dependency_overrides.clear()
 
@@ -134,7 +123,9 @@ async def second_user_token(second_user: User) -> str:
 
 
 @pytest_asyncio.fixture
-async def friends(db_session: AsyncSession, test_user: User, second_user: User) -> Friendship:
+async def friends(
+    db_session: AsyncSession, test_user: User, second_user: User
+) -> Friendship:
     """Create an accepted friendship between the two test users."""
     friendship = Friendship(
         requester_id=test_user.id,

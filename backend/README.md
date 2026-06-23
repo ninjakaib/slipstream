@@ -1,6 +1,6 @@
 # SlipStream Backend
 
-Real-time social driving network API built with FastAPI, Postgres/PostGIS, and Redis.
+Real-time social driving network API built with FastAPI and Postgres/PostGIS.
 
 ## Quick Start (Docker Compose)
 
@@ -14,15 +14,12 @@ POSTGRES_PASSWORD=postgres
 POSTGRES_DB=slipstream
 POSTGRES_PORT=5432
 
-# Redis
-REDIS_PORT=6379
-
 # API
 API_PORT=8000
 
 # App settings (container URLs are set in docker-compose.yml environment block)
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/slipstream
-REDIS_URL=redis://localhost:6379/0
+
 
 # JWT (generate a real secret: openssl rand -hex 32)
 JWT_SECRET_KEY=local-dev-secret-change-in-production
@@ -44,7 +41,6 @@ docker compose up --watch
 
 This starts:
 - **Postgres** (PostGIS) on port 5432
-- **Redis** on port 6379
 - **FastAPI** on port 8000 (with hot reload via compose watch)
 
 ### 3. Run migrations
@@ -109,7 +105,7 @@ backend/
 │   └── versions/            # Migration files
 ├── alembic.ini              # Alembic config
 ├── Dockerfile               # Multi-stage (build → api → api-dev)
-├── docker-compose.yml       # Local dev (postgres + redis + api)
+├── docker-compose.yml       # Local dev (postgres + api)
 ├── docker-bake.hcl          # Production build targets
 └── pyproject.toml           # Dependencies
 ```

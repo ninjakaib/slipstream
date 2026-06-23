@@ -12,7 +12,6 @@ from sqlalchemy.orm import selectinload
 from backend.database import get_db
 from backend.dependencies import get_current_user
 from backend.models import Friendship, FriendshipStatus, User
-from backend.realtime.events import publish_notification
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 
@@ -242,13 +241,7 @@ async def send_friend_request(
     )
     db.add(friendship)
 
-    # Notify target user of friend request
-    await publish_notification(
-        target_user_id=target_id,
-        notification_type="friend_request",
-        from_user={"user_id": str(current_user.id), "username": current_user.username},
-        message=f"{current_user.username} wants to be friends",
-    )
+    # TODO: Send real-time notification when notification system is implemented
 
     return MessageResponse(message="Friend request sent")
 
@@ -280,13 +273,7 @@ async def accept_friend_request(
     friendship.status = FriendshipStatus.ACCEPTED
     friendship.accepted_at = datetime.now(UTC)
 
-    # Notify the requester that their request was accepted
-    await publish_notification(
-        target_user_id=friendship.requester_id,
-        notification_type="friend_accepted",
-        from_user={"user_id": str(current_user.id), "username": current_user.username},
-        message=f"{current_user.username} accepted your friend request",
-    )
+    # TODO: Send real-time notification when notification system is implemented
 
     return MessageResponse(message="Friend request accepted")
 

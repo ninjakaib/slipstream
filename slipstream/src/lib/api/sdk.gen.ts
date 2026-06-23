@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptFriendRequestData, AcceptFriendRequestErrors, AcceptFriendRequestResponses, AcceptJoinRequestData, AcceptJoinRequestErrors, AcceptJoinRequestResponses, ActivateCarData, ActivateCarErrors, ActivateCarResponses, AuthWithAppleData, AuthWithAppleErrors, AuthWithAppleResponses, CreateCarData, CreateCarErrors, CreateCarResponses, CreateConvoyData, CreateConvoyErrors, CreateConvoyResponses, DeclineFriendRequestData, DeclineFriendRequestErrors, DeclineFriendRequestResponses, DeclineJoinRequestData, DeclineJoinRequestErrors, DeclineJoinRequestResponses, DeleteAccountData, DeleteAccountResponses, DeleteCarData, DeleteCarErrors, DeleteCarResponses, EndConvoyData, EndConvoyErrors, EndConvoyResponses, GetActiveRouteData, GetActiveRouteErrors, GetActiveRouteResponses, GetConvoyData, GetConvoyErrors, GetConvoyResponses, GetMessagesData, GetMessagesErrors, GetMessagesResponses, GetMyProfileData, GetMyProfileResponses, GetNearbyConvoysData, GetNearbyConvoysErrors, GetNearbyConvoysResponses, GetNearbyDriversData, GetNearbyDriversErrors, GetNearbyDriversResponses, GetSpatialConfigData, GetSpatialConfigResponses, GetUserProfileData, GetUserProfileErrors, GetUserProfileResponses, HealthCheckData, HealthCheckResponses, InviteToConvoyData, InviteToConvoyErrors, InviteToConvoyResponses, JoinConvoyData, JoinConvoyErrors, JoinConvoyResponses, KickMemberData, KickMemberErrors, KickMemberResponses, LeaveConvoyData, LeaveConvoyErrors, LeaveConvoyResponses, ListCarsData, ListCarsResponses, ListFriendRequestsData, ListFriendRequestsResponses, ListFriendsData, ListFriendsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, RefreshData, RefreshErrors, RefreshResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveFriendData, RemoveFriendErrors, RemoveFriendResponses, RequestToJoinData, RequestToJoinErrors, RequestToJoinResponses, SearchUsersData, SearchUsersErrors, SearchUsersResponses, SendFriendRequestData, SendFriendRequestErrors, SendFriendRequestResponses, SendMessageData, SendMessageErrors, SendMessageResponses, SendQuickActionData, SendQuickActionErrors, SendQuickActionResponses, SetRouteData, SetRouteErrors, SetRouteResponses, UpdateCarData, UpdateCarErrors, UpdateCarResponses, UpdateConvoyData, UpdateConvoyErrors, UpdateConvoyResponses, UpdateMyProfileData, UpdateMyProfileErrors, UpdateMyProfileResponses } from './types.gen';
+import type { AcceptFriendRequestData, AcceptFriendRequestErrors, AcceptFriendRequestResponses, AcceptJoinRequestData, AcceptJoinRequestErrors, AcceptJoinRequestResponses, ActivateCarData, ActivateCarErrors, ActivateCarResponses, AuthWithAppleData, AuthWithAppleErrors, AuthWithAppleResponses, CreateCarData, CreateCarErrors, CreateCarResponses, CreateConvoyData, CreateConvoyErrors, CreateConvoyResponses, DeclineFriendRequestData, DeclineFriendRequestErrors, DeclineFriendRequestResponses, DeclineJoinRequestData, DeclineJoinRequestErrors, DeclineJoinRequestResponses, DeleteAccountData, DeleteAccountResponses, DeleteCarData, DeleteCarErrors, DeleteCarResponses, EndConvoyData, EndConvoyErrors, EndConvoyResponses, GetActiveRouteData, GetActiveRouteErrors, GetActiveRouteResponses, GetConvoyData, GetConvoyErrors, GetConvoyResponses, GetMessagesData, GetMessagesErrors, GetMessagesResponses, GetMyProfileData, GetMyProfileResponses, GetSpatialConfigData, GetSpatialConfigResponses, GetUserProfileData, GetUserProfileErrors, GetUserProfileResponses, HealthCheckData, HealthCheckResponses, InviteToConvoyData, InviteToConvoyErrors, InviteToConvoyResponses, JoinConvoyData, JoinConvoyErrors, JoinConvoyResponses, KickMemberData, KickMemberErrors, KickMemberResponses, LeaveConvoyData, LeaveConvoyErrors, LeaveConvoyResponses, ListCarsData, ListCarsResponses, ListFriendRequestsData, ListFriendRequestsResponses, ListFriendsData, ListFriendsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, RefreshData, RefreshErrors, RefreshResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveFriendData, RemoveFriendErrors, RemoveFriendResponses, RequestToJoinData, RequestToJoinErrors, RequestToJoinResponses, SearchUsersData, SearchUsersErrors, SearchUsersResponses, SendFriendRequestData, SendFriendRequestErrors, SendFriendRequestResponses, SendMessageData, SendMessageErrors, SendMessageResponses, SendQuickActionData, SendQuickActionErrors, SendQuickActionResponses, SetRouteData, SetRouteErrors, SetRouteResponses, UpdateCarData, UpdateCarErrors, UpdateCarResponses, UpdateConvoyData, UpdateConvoyErrors, UpdateConvoyResponses, UpdateMyProfileData, UpdateMyProfileErrors, UpdateMyProfileResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -506,38 +506,6 @@ export const setRoute = <ThrowOnError extends boolean = false>(options: Options<
         'Content-Type': 'application/json',
         ...options.headers
     }
-});
-
-/**
- * Get Nearby Drivers
- *
- * Get nearby visible drivers within a radius.
- *
- * Uses Redis GEOSEARCH for spatial lookup, then enriches with user
- * metadata from Postgres. Applies visibility and friendship filtering.
- *
- * The radius can be provided explicitly (viewport-driven) or defaults
- * to the user's discovery_radius_miles setting.
- */
-export const getNearbyDrivers = <ThrowOnError extends boolean = false>(options: Options<GetNearbyDriversData, ThrowOnError>) => (options.client ?? client).get<GetNearbyDriversResponses, GetNearbyDriversErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/discovery/nearby',
-    ...options
-});
-
-/**
- * Get Nearby Convoys
- *
- * Get active/forming public convoys nearby.
- *
- * In the full implementation, this will use spatial queries
- * based on convoy member positions from Redis.
- * For now, returns all non-ended public convoys.
- */
-export const getNearbyConvoys = <ThrowOnError extends boolean = false>(options?: Options<GetNearbyConvoysData, ThrowOnError>) => (options?.client ?? client).get<GetNearbyConvoysResponses, GetNearbyConvoysErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/discovery/convoys',
-    ...options
 });
 
 /**

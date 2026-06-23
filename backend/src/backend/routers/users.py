@@ -11,7 +11,6 @@ from sqlalchemy.orm import selectinload
 from backend.database import get_db
 from backend.dependencies import get_current_user
 from backend.models import Car, User, VisibilityMode, SpeedUnit
-from backend.realtime.events import remove_user_presence, set_user_visibility_in_redis
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -169,12 +168,6 @@ async def update_my_profile(
 
     await db.flush()
 
-    # If visibility changed, update Redis
-    if "visibility" in update_data:
-        await set_user_visibility_in_redis(
-            current_user.id, update_data["visibility"].value
-        )
-
     # Reload with cars
     result = await db.execute(
         select(User).where(User.id == current_user.id).options(selectinload(User.cars))
@@ -265,8 +258,5 @@ async def delete_account(
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
     """Delete the current user's account and all associated data."""
-    # Remove real-time presence data
-    await remove_user_presence(current_user.id)
-
     await db.delete(current_user)
     return MessageResponse(message="Account deleted")
