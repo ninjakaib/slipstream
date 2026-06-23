@@ -77,7 +77,7 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
     (expanded: boolean) => {
       Animated.spring(expandAnim, {
         toValue: expanded ? 1 : 0,
-        useNativeDriver: true,
+        useNativeDriver: false,
         tension: 200,
         friction: 20,
       }).start();
@@ -151,7 +151,7 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
     }
   })();
 
-  const followPitch = isDriving ? 65 : show3d ? 50 : 0;
+  const followPitch = isDriving ? 75 : show3d ? 50 : 0;
   const followZoom = isDriving ? 17.5 : 15;
 
   const lightPreset = useMemo(() => getLightPreset(), []);
@@ -165,17 +165,11 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
 
   const otherButtonsStyle = {
     opacity: expandAnim,
-    transform: [
-      {
-        scaleY: expandAnim,
-      },
-      {
-        translateY: expandAnim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [44, 0],
-        }),
-      },
-    ],
+    height: expandAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 89],
+    }),
+    overflow: "hidden" as const,
   };
 
   return (
@@ -309,7 +303,7 @@ const styles = StyleSheet.create({
     right: 12,
   },
   glassContainer: {
-    borderRadius: 12,
+    borderRadius: 22,
     overflow: "hidden",
   },
   controlButton: {
