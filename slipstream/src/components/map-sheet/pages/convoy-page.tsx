@@ -147,10 +147,9 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   emptyContainer: {
-    flex: 1,
     alignItems: "center",
-    justifyContent: "center",
     paddingHorizontal: 32,
+    paddingTop: 80,
     gap: 12,
   },
   emptyIcon: {

@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { router } from "expo-router";
 import { SymbolView } from "expo-symbols";
 
 import { useAuth } from "@/contexts/auth-context";
@@ -9,6 +8,7 @@ import { LiveMap } from "@/features/map/live-map";
 import ProfileScreen from "@/features/profile/profile-screen";
 import { useLocation } from "@/hooks/use-location";
 import { useWebSocket } from "@/hooks/use-websocket";
+import { MapSheet } from "@/components/map-sheet/map-sheet";
 
 const SERVER_URL = process.env.EXPO_PUBLIC_WS_URL ?? null;
 
@@ -27,14 +27,6 @@ export default function MapScreen() {
   const [currentResolution, setCurrentResolution] = useState(0);
   const [profileVisible, setProfileVisible] = useState(false);
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
-
-  const sheetPresented = useRef(false);
-  useEffect(() => {
-    if (!sheetPresented.current) {
-      sheetPresented.current = true;
-      router.push("/sheet" as any);
-    }
-  }, []);
 
   const handleCellsChanged = useCallback(
     (cells: string[], resolution: number) => {
@@ -101,6 +93,8 @@ export default function MapScreen() {
         </View>
         <ProfileScreen />
       </Modal>
+
+      <MapSheet />
     </View>
   );
 }

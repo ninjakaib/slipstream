@@ -25,19 +25,6 @@ function RootContent() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
-      <Stack.Screen
-        name="sheet"
-        options={{
-          presentation: "formSheet",
-          gestureEnabled: false,
-          sheetGrabberVisible: true,
-          sheetAllowedDetents: [0.12, 0.5, 1],
-          sheetInitialDetentIndex: 1,
-          sheetLargestUndimmedDetentIndex: 2,
-          sheetCornerRadius: 20,
-          contentStyle: { backgroundColor: "transparent" },
-        }}
-      />
     </Stack>
   );
 }

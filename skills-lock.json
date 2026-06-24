@@ -30,6 +30,12 @@
       "sourceType": "github",
       "skillPath": "SKILL.md",
       "computedHash": "2692dc771633b2915c1b75000009c1a9198af3e3f994ae46d175b48e008edc57"
+    },
+    "truesheet-usage": {
+      "source": "lodev09/react-native-true-sheet",
+      "sourceType": "github",
+      "skillPath": "skills/truesheet-usage/SKILL.md",
+      "computedHash": "5d0fc9b85cd59c2440da89cc529ed99c201266fc9101598d8fbd3e9c7e7c4002"
     }
   }
 }
