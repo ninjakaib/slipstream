@@ -120,10 +120,11 @@ const styles = StyleSheet.create({
   },
   pagesRow: {
     flexDirection: "row",
-    flex: 1,
+    width: SCREEN_WIDTH * PAGE_COUNT,
+    height: "100%",
   },
   page: {
     width: SCREEN_WIDTH,
-    flex: 1,
+    height: "100%",
   },
 });
