@@ -28,6 +28,14 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="sheet-demo">
+        <NativeTabs.Trigger.Label>Sheet</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: "rectangle.bottomhalf.inset.filled", selected: "rectangle.bottomhalf.inset.filled" }}
+          src={require('@/assets/images/tabIcons/explore.png')}
+        />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="explore">
         <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
