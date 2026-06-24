@@ -15,8 +15,8 @@ import logging
 import time
 import uuid
 
-from backend.spatial.store import SpatialStore
-from backend.spatial.types import ConnectionState
+from slipstream.spatial.store import SpatialStore
+from slipstream.spatial.types import ConnectionState
 
 logger = logging.getLogger(__name__)
 

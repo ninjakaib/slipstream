@@ -11,7 +11,7 @@ import httpx
 import jwt
 from jwt import PyJWKClient
 
-from backend.config import settings
+from slipstream.config import settings
 
 
 # ---------------------------------------------------------------------------

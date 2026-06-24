@@ -35,7 +35,7 @@ import httpx
 # Ensure the backend package is importable (for JWT minting)
 sys.path.insert(0, "src")
 
-from backend.auth import create_access_token  # noqa: E402
+from slipstream.auth import create_access_token  # noqa: E402
 
 from tools.simulator.config import (  # noqa: E402
     DEFAULT_NUM_DRIVERS,

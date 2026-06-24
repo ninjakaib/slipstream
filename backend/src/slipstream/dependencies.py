@@ -8,9 +8,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth import decode_access_token
-from backend.database import get_db
-from backend.models import User
+from slipstream.auth import decode_access_token
+from slipstream.database import get_db
+from slipstream.models import User
 
 # HTTPBearer extracts the token from the Authorization: Bearer <token> header
 _bearer_scheme = HTTPBearer()

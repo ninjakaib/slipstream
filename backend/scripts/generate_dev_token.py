@@ -18,9 +18,9 @@ DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/slipstream
 
 
 async def main() -> None:
-    from backend.auth import create_access_token
-    from backend.config import settings
-    from backend.models import User
+    from slipstream.auth import create_access_token
+    from slipstream.config import settings
+    from slipstream.models import User
     from datetime import datetime, timedelta, UTC
     import jwt
 

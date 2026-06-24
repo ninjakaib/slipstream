@@ -18,7 +18,7 @@ Data Flow:
     5. Store registers watcher, handler sends snapshot of current cell members
 """
 
-from backend.spatial.store import SpatialStore, spatial_store, INDEX_RESOLUTIONS
-from backend.spatial.router import router as spatial_router
+from slipstream.spatial.store import SpatialStore, spatial_store, INDEX_RESOLUTIONS
+from slipstream.spatial.router import router as spatial_router
 
 __all__ = ["SpatialStore", "spatial_store", "spatial_router", "INDEX_RESOLUTIONS"]

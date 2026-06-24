@@ -26,13 +26,13 @@ import uuid
 import jwt
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from backend.auth import decode_access_token
-from backend.spatial.handlers import (
+from slipstream.auth import decode_access_token
+from slipstream.spatial.handlers import (
     handle_disconnect,
     handle_location_update,
     handle_viewport_update,
 )
-from backend.spatial.store import spatial_store, INDEX_RESOLUTIONS
+from slipstream.spatial.store import spatial_store, INDEX_RESOLUTIONS
 
 logger = logging.getLogger(__name__)
 

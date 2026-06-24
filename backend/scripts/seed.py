@@ -132,8 +132,8 @@ LA_POSITIONS = [
 
 
 async def main() -> None:
-    from backend.auth import hash_password, create_access_token
-    from backend.models import (
+    from slipstream.auth import hash_password, create_access_token
+    from slipstream.models import (
         Base,
         User,
         Car,

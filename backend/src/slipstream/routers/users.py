@@ -8,9 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.database import get_db
-from backend.dependencies import get_current_user
-from backend.models import Car, User, VisibilityMode, SpeedUnit
+from slipstream.database import get_db
+from slipstream.dependencies import get_current_user
+from slipstream.models import Car, User, VisibilityMode, SpeedUnit
 
 router = APIRouter(prefix="/users", tags=["users"])
 

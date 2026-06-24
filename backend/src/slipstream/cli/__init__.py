@@ -2,7 +2,7 @@
 
 import click
 
-from backend.cli.openapi import openapi
+from slipstream.cli.openapi import openapi
 
 
 @click.group()

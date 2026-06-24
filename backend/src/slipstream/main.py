@@ -7,13 +7,13 @@ from collections.abc import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from backend.config import settings
-from backend.routers.auth import router as auth_router
-from backend.routers.users import router as users_router
-from backend.routers.cars import router as cars_router
-from backend.routers.friends import router as friends_router
-from backend.routers.convoys import router as convoys_router
-from backend.spatial import spatial_router
+from slipstream.config import settings
+from slipstream.routers.auth import router as auth_router
+from slipstream.routers.users import router as users_router
+from slipstream.routers.cars import router as cars_router
+from slipstream.routers.friends import router as friends_router
+from slipstream.routers.convoys import router as convoys_router
+from slipstream.spatial import spatial_router
 
 # Configure logging
 logging.basicConfig(
@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     logger.info("Shutting down SlipStream...")
 
-    from backend.database import engine
+    from slipstream.database import engine
 
     await engine.dispose()
 
@@ -77,7 +77,7 @@ app.include_router(spatial_router)
 @app.get("/health", tags=["system"])
 async def health_check() -> dict:
     """Basic health check endpoint."""
-    from backend.spatial.store import spatial_store
+    from slipstream.spatial.store import spatial_store
 
     return {
         "status": "ok",

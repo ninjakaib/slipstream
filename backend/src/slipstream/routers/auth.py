@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth import (
+from slipstream.auth import (
     create_access_token,
     fetch_apple_public_keys,
     generate_refresh_token,
@@ -17,10 +17,10 @@ from backend.auth import (
     hash_refresh_token,
     verify_password,
 )
-from backend.config import settings
-from backend.database import get_db
-from backend.dependencies import get_current_user
-from backend.models import RefreshToken, User
+from slipstream.config import settings
+from slipstream.database import get_db
+from slipstream.dependencies import get_current_user
+from slipstream.models import RefreshToken, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

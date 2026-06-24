@@ -3,7 +3,7 @@
 import pytest
 from httpx import AsyncClient
 
-from backend.models import User, Friendship
+from slipstream.models import User, Friendship
 
 
 @pytest.mark.asyncio

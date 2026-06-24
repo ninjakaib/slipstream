@@ -21,7 +21,7 @@ import click
 )
 def openapi(output: Path | None, clean_operation_ids: bool) -> None:
     """Generate the OpenAPI specification from the FastAPI app."""
-    from backend.main import app
+    from slipstream.main import app
 
     spec = app.openapi()
 

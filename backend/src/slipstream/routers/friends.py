@@ -9,9 +9,9 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.database import get_db
-from backend.dependencies import get_current_user
-from backend.models import Friendship, FriendshipStatus, User
+from slipstream.database import get_db
+from slipstream.dependencies import get_current_user
+from slipstream.models import Friendship, FriendshipStatus, User
 
 router = APIRouter(prefix="/friends", tags=["friends"])
 

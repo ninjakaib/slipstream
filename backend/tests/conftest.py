@@ -16,10 +16,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.auth import create_access_token, hash_password
-from backend.database import get_db
-from backend.main import app
-from backend.models import Base, User, Car, Friendship, FriendshipStatus
+from slipstream.auth import create_access_token, hash_password
+from slipstream.database import get_db
+from slipstream.main import app
+from slipstream.models import Base, User, Car, Friendship, FriendshipStatus
 
 
 # Use in-memory SQLite for tests (fast, no external deps)

@@ -73,12 +73,12 @@ A real-time social driving app for car enthusiasts — "Forza Horizon online lob
 - **Containerization:** Docker Compose (Postgres + API with hot reload)
 
 ### Key: No Redis
-Redis was removed. The real-time location system uses an **in-memory spatial store** (`backend/src/backend/spatial/`). All position tracking, cell membership, viewport subscriptions, and event dispatch happen in-process. This is the MVP approach — single-server, no external message broker needed.
+Redis was removed. The real-time location system uses an **in-memory spatial store** (`backend/src/slipstream/spatial/`). All position tracking, cell membership, viewport subscriptions, and event dispatch happen in-process. This is the MVP approach — single-server, no external message broker needed.
 
 ## Backend Structure
 
 ```
-backend/src/backend/
+backend/src/slipstream/
 ├── main.py              # FastAPI app, router registration
 ├── config.py            # Settings from env vars
 ├── database.py          # Async SQLAlchemy engine + session

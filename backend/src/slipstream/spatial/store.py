@@ -19,7 +19,7 @@ import uuid
 
 import h3
 
-from backend.spatial.types import (
+from slipstream.spatial.types import (
     CellTransition,
     ConnectionState,
     PositionState,

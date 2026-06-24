@@ -1,5 +1,5 @@
 [project]
-name = "backend"
+name = "slipstream"
 version = "0.1.0"
 description = "SlipStream backend — real-time social driving network API"
 readme = "README.md"
@@ -22,15 +22,25 @@ dependencies = [
 
 [project.optional-dependencies]
 cli = ["click>=8.1.0"]
-dev = ["pytest>=8.0.0", "pytest-asyncio>=0.24.0", "aiosqlite>=0.20.0"]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "aiosqlite>=0.20.0",
+    "paracelsus>=0.15.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [project.scripts]
-slipstream = "backend.cli:cli"
+slipstream = "slipstream.cli:cli"
 
 [build-system]
 requires = ["uv_build>=0.9.9,<0.10.0"]
 build-backend = "uv_build"
+
+
+[tool.paracelsus]
+base = "agentflow.api.db.oracle.models:OracleTenantBase"
+imports = ["agentflow.api.db.oracle.models"]

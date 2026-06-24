@@ -88,7 +88,7 @@ TAG=v1.0.0 SHA=$(git rev-parse --short HEAD) docker buildx bake --push
 
 ```
 backend/
-├── src/backend/
+├── src/slipstream/
 │   ├── __init__.py          # Package entry point
 │   ├── main.py              # FastAPI app instance
 │   ├── config.py            # Settings (env vars)

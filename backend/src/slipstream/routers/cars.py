@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.database import get_db
-from backend.dependencies import get_current_user
-from backend.models import Car, User
+from slipstream.database import get_db
+from slipstream.dependencies import get_current_user
+from slipstream.models import Car, User
 
 router = APIRouter(prefix="/cars", tags=["cars"])
 
