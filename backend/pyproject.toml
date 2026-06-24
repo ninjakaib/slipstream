@@ -42,5 +42,9 @@ build-backend = "uv_build"
 
 
 [tool.paracelsus]
-base = "agentflow.api.db.oracle.models:OracleTenantBase"
-imports = ["agentflow.api.db.oracle.models"]
+base = "slipstream.models:Base"
+imports = ["slipstream.models"]
+
+
+[tool.fastapi]
+entrypoint = "slipstream.main:app"

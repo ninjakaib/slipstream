@@ -7,3 +7,10 @@ repos:
         language: system
         files: ^backend/src/slipstream/(routers/|models\.py|main\.py|dependencies\.py)
         pass_filenames: false
+
+      - id: generate-erd
+        name: Generate ERD
+        entry: bash -c 'cd backend && uv run paracelsus inject ../docs/erd.md && git add ../docs/erd.md'
+        language: system
+        files: backend/src/slipstream/models.py
+        pass_filenames: false
