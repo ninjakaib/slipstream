@@ -1,13 +1,10 @@
-/**
- * SocialPage — Friends list with online status + friend requests.
- *
- * Shows accepted friends with their active car and live status,
- * pending friend requests with accept/decline, and a user search button.
- */
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SymbolView } from "expo-symbols";
+import { useSheetColors } from "@/hooks/use-sheet-colors";
 
 export function SocialPage() {
+  const colors = useSheetColors();
+
   return (
     <ScrollView
       style={styles.container}
@@ -16,62 +13,37 @@ export function SocialPage() {
     >
       {/* Header with search action */}
       <View style={styles.header}>
-        <Text style={styles.pageTitle}>Friends</Text>
+        <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Friends</Text>
         <Pressable style={styles.addButton} accessibilityLabel="Find friends">
           <SymbolView name="person.badge.plus" tintColor="#007AFF" size={20} />
         </Pressable>
       </View>
 
       {/* Friend Requests Banner */}
-      <Pressable style={styles.requestsBanner}>
+      <Pressable style={[styles.requestsBanner, { backgroundColor: colors.cardBackgroundElevated }]}>
         <View style={styles.requestsBadge}>
           <Text style={styles.requestsBadgeText}>2</Text>
         </View>
-        <Text style={styles.requestsText}>Friend Requests</Text>
-        <SymbolView name="chevron.right" tintColor="#8E8E93" size={14} />
+        <Text style={[styles.requestsText, { color: colors.textPrimary }]}>Friend Requests</Text>
+        <SymbolView name="chevron.right" tintColor={colors.textTertiary} size={14} />
       </Pressable>
 
       {/* Online Friends */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Online — 3</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Online — 3</Text>
         <View style={styles.friendsList}>
-          <FriendRow
-            username="mikeGTR"
-            displayName="Mike Chen"
-            car="2024 GT-R NISMO"
-            status="driving"
-          />
-          <FriendRow
-            username="sarahM4"
-            displayName="Sarah Kim"
-            car="2024 M4 Competition"
-            status="parked"
-          />
-          <FriendRow
-            username="alexRS"
-            displayName="Alex Rivera"
-            car="2022 911 GT3 RS"
-            status="driving"
-          />
+          <FriendRow username="mikeGTR" displayName="Mike Chen" car="2024 GT-R NISMO" status="driving" colors={colors} />
+          <FriendRow username="sarahM4" displayName="Sarah Kim" car="2024 M4 Competition" status="parked" colors={colors} />
+          <FriendRow username="alexRS" displayName="Alex Rivera" car="2022 911 GT3 RS" status="driving" colors={colors} />
         </View>
       </View>
 
       {/* Offline Friends */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Offline</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Offline</Text>
         <View style={styles.friendsList}>
-          <FriendRow
-            username="jayZ4M"
-            displayName="Jay Martinez"
-            car="2023 BMW Z4 M"
-            status="offline"
-          />
-          <FriendRow
-            username="devSupra"
-            displayName="Dev Patel"
-            car="2024 GR Supra"
-            status="offline"
-          />
+          <FriendRow username="jayZ4M" displayName="Jay Martinez" car="2023 BMW Z4 M" status="offline" colors={colors} />
+          <FriendRow username="devSupra" displayName="Dev Patel" car="2024 GR Supra" status="offline" colors={colors} />
         </View>
       </View>
     </ScrollView>
@@ -79,15 +51,16 @@ export function SocialPage() {
 }
 
 function FriendRow({
-  username,
   displayName,
   car,
   status,
+  colors,
 }: {
   username: string;
   displayName: string;
   car: string;
   status: "driving" | "parked" | "offline";
+  colors: ReturnType<typeof useSheetColors>;
 }) {
   const statusColor =
     status === "driving"
@@ -105,15 +78,14 @@ function FriendRow({
 
   return (
     <Pressable style={styles.friendRow}>
-      {/* Avatar placeholder */}
-      <View style={styles.avatar}>
-        <SymbolView name="person.fill" tintColor="#8E8E93" size={18} />
-        <View style={[styles.friendStatusDot, { backgroundColor: statusColor }]} />
+      <View style={[styles.avatar, { backgroundColor: colors.avatarBackground }]}>
+        <SymbolView name="person.fill" tintColor={colors.textTertiary} size={18} />
+        <View style={[styles.friendStatusDot, { backgroundColor: statusColor, borderColor: colors.borderSubtle }]} />
       </View>
 
       <View style={styles.friendInfo}>
-        <Text style={styles.friendName}>{displayName}</Text>
-        <Text style={styles.friendMeta}>
+        <Text style={[styles.friendName, { color: colors.textPrimary }]}>{displayName}</Text>
+        <Text style={[styles.friendMeta, { color: colors.textSecondary }]}>
           {car} · {statusLabel}
         </Text>
       </View>
@@ -143,7 +115,6 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
     letterSpacing: -0.4,
   },
   addButton: {
@@ -157,7 +128,6 @@ const styles = StyleSheet.create({
   requestsBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -181,7 +151,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: "500",
-    color: "#FFFFFF",
   },
   section: {
     marginBottom: 24,
@@ -189,7 +158,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#8E8E93",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 10,
@@ -210,7 +178,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -223,7 +190,6 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: "rgba(28, 28, 30, 0.9)",
   },
   friendInfo: {
     flex: 1,
@@ -231,11 +197,9 @@ const styles = StyleSheet.create({
   friendName: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#FFFFFF",
   },
   friendMeta: {
     fontSize: 13,
-    color: "#8E8E93",
     marginTop: 2,
   },
 });

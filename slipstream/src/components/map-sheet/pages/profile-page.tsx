@@ -1,14 +1,10 @@
-/**
- * ProfilePage — User profile summary with avatar, car, and stats.
- *
- * Quick view of the user's identity — their display name, username,
- * active car, and garage overview. Tapping sections navigates to
- * full edit flows (future).
- */
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SymbolView } from "expo-symbols";
+import { useSheetColors } from "@/hooks/use-sheet-colors";
 
 export function ProfilePage() {
+  const colors = useSheetColors();
+
   return (
     <ScrollView
       style={styles.container}
@@ -18,54 +14,54 @@ export function ProfilePage() {
       {/* Profile Header */}
       <View style={styles.header}>
         <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <SymbolView name="person.fill" tintColor="#8E8E93" size={32} />
+          <View style={[styles.avatar, { backgroundColor: colors.avatarBackground }]}>
+            <SymbolView name="person.fill" tintColor={colors.textTertiary} size={32} />
           </View>
-          <Pressable style={styles.editAvatarButton}>
+          <Pressable style={[styles.editAvatarButton, { borderColor: colors.borderSubtle }]}>
             <SymbolView name="camera.fill" tintColor="#FFFFFF" size={10} />
           </Pressable>
         </View>
-        <Text style={styles.displayName}>Driver</Text>
-        <Text style={styles.username}>@username</Text>
+        <Text style={[styles.displayName, { color: colors.textPrimary }]}>Driver</Text>
+        <Text style={[styles.username, { color: colors.textSecondary }]}>@username</Text>
       </View>
 
       {/* Active Car Card */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Active Car</Text>
-        <Pressable style={styles.carCard}>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Active Car</Text>
+        <Pressable style={[styles.carCard, { backgroundColor: colors.cardBackgroundElevated }]}>
           <View style={styles.carIcon}>
             <SymbolView name="car.fill" tintColor="#57C7FF" size={22} />
           </View>
           <View style={styles.carInfo}>
-            <Text style={styles.carName}>2024 Nissan GT-R NISMO</Text>
-            <Text style={styles.carColor}>Pearl White · 600 HP</Text>
+            <Text style={[styles.carName, { color: colors.textPrimary }]}>2024 Nissan GT-R NISMO</Text>
+            <Text style={[styles.carColor, { color: colors.textSecondary }]}>Pearl White · 600 HP</Text>
           </View>
-          <SymbolView name="chevron.right" tintColor="#48484A" size={14} />
+          <SymbolView name="chevron.right" tintColor={colors.chevron} size={14} />
         </Pressable>
       </View>
 
       {/* Garage */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Garage</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Garage</Text>
           <Pressable>
             <Text style={styles.seeAll}>See All</Text>
           </Pressable>
         </View>
         <View style={styles.garageGrid}>
-          <GarageSlot car="2024 GT-R NISMO" active />
-          <GarageSlot car="1999 Skyline R34" />
-          <GarageSlot />
+          <GarageSlot car="2024 GT-R NISMO" active colors={colors} />
+          <GarageSlot car="1999 Skyline R34" colors={colors} />
+          <GarageSlot colors={colors} />
         </View>
       </View>
 
       {/* Stats */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Stats</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Stats</Text>
         <View style={styles.statsRow}>
-          <StatCard value="12" label="Drives" />
-          <StatCard value="8" label="Friends" />
-          <StatCard value="3" label="Convoys" />
+          <StatCard value="12" label="Drives" colors={colors} />
+          <StatCard value="8" label="Friends" colors={colors} />
+          <StatCard value="3" label="Convoys" colors={colors} />
         </View>
       </View>
 
@@ -78,35 +74,35 @@ export function ProfilePage() {
   );
 }
 
-function GarageSlot({ car, active }: { car?: string; active?: boolean }) {
+function GarageSlot({ car, active, colors }: { car?: string; active?: boolean; colors: ReturnType<typeof useSheetColors> }) {
   return (
-    <View style={[styles.garageSlot, active && styles.garageSlotActive]}>
+    <View style={[styles.garageSlot, { backgroundColor: colors.cardBackground }, active && styles.garageSlotActive]}>
       {car ? (
         <>
           <SymbolView
             name="car.side.fill"
-            tintColor={active ? "#57C7FF" : "#8E8E93"}
+            tintColor={active ? "#57C7FF" : colors.textTertiary}
             size={20}
           />
-          <Text style={[styles.garageCarName, active && styles.garageCarNameActive]} numberOfLines={1}>
+          <Text style={[styles.garageCarName, { color: colors.textSecondary }, active && styles.garageCarNameActive]} numberOfLines={1}>
             {car}
           </Text>
         </>
       ) : (
         <>
-          <SymbolView name="plus" tintColor="#48484A" size={20} />
-          <Text style={styles.garageAddText}>Add Car</Text>
+          <SymbolView name="plus" tintColor={colors.chevron} size={20} />
+          <Text style={[styles.garageAddText, { color: colors.chevron }]}>Add Car</Text>
         </>
       )}
     </View>
   );
 }
 
-function StatCard({ value, label }: { value: string; label: string }) {
+function StatCard({ value, label, colors }: { value: string; label: string; colors: ReturnType<typeof useSheetColors> }) {
   return (
-    <View style={styles.statCard}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={[styles.statCard, { backgroundColor: colors.cardBackground }]}>
+      <Text style={[styles.statValue, { color: colors.textPrimary }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{label}</Text>
     </View>
   );
 }
@@ -132,7 +128,6 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -147,17 +142,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: "rgba(28, 28, 30, 0.9)",
   },
   displayName: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
     letterSpacing: -0.4,
   },
   username: {
     fontSize: 15,
-    color: "#8E8E93",
     marginTop: 2,
   },
   section: {
@@ -171,7 +163,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#8E8E93",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 10,
@@ -186,7 +177,6 @@ const styles = StyleSheet.create({
   carCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -206,11 +196,9 @@ const styles = StyleSheet.create({
   carName: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#FFFFFF",
   },
   carColor: {
     fontSize: 13,
-    color: "#8E8E93",
     marginTop: 2,
   },
   garageGrid: {
@@ -221,7 +209,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
     borderRadius: 12,
     paddingVertical: 16,
     gap: 6,
@@ -235,7 +222,6 @@ const styles = StyleSheet.create({
   garageCarName: {
     fontSize: 11,
     fontWeight: "500",
-    color: "#8E8E93",
     textAlign: "center",
     paddingHorizontal: 4,
   },
@@ -245,7 +231,6 @@ const styles = StyleSheet.create({
   garageAddText: {
     fontSize: 11,
     fontWeight: "500",
-    color: "#48484A",
   },
   statsRow: {
     flexDirection: "row",
@@ -254,7 +239,6 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
     borderRadius: 12,
     paddingVertical: 16,
     gap: 4,
@@ -262,12 +246,10 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
   },
   statLabel: {
     fontSize: 12,
     fontWeight: "500",
-    color: "#8E8E93",
   },
   logoutButton: {
     flexDirection: "row",

@@ -1,124 +1,61 @@
-/**
- * SettingsPage — App preferences and configuration.
- *
- * Visibility, speed units, discovery radius, account management.
- * Each row is tappable to toggle or navigate to a picker.
- */
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SymbolView } from "expo-symbols";
+import { useSheetColors } from "@/hooks/use-sheet-colors";
 
 export function SettingsPage() {
+  const colors = useSheetColors();
+
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.pageTitle}>Settings</Text>
+      <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Settings</Text>
 
       {/* Visibility */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Privacy</Text>
-        <View style={styles.card}>
-          <SettingsRow
-            icon="eye.fill"
-            iconColor="#34C759"
-            label="Visibility"
-            value="On"
-            hasChevron
-          />
-          <View style={styles.separator} />
-          <SettingsRow
-            icon="location.circle.fill"
-            iconColor="#007AFF"
-            label="Discovery Radius"
-            value="25 mi"
-            hasChevron
-          />
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Privacy</Text>
+        <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
+          <SettingsRow icon="eye.fill" iconColor="#34C759" label="Visibility" value="On" hasChevron colors={colors} />
+          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
+          <SettingsRow icon="location.circle.fill" iconColor="#007AFF" label="Discovery Radius" value="25 mi" hasChevron colors={colors} />
         </View>
       </View>
 
       {/* Preferences */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Preferences</Text>
-        <View style={styles.card}>
-          <SettingsRow
-            icon="speedometer"
-            iconColor="#FF9500"
-            label="Speed Unit"
-            value="mph"
-            hasChevron
-          />
-          <View style={styles.separator} />
-          <SettingsRow
-            icon="moon.fill"
-            iconColor="#AF52DE"
-            label="Map Style"
-            value="Auto"
-            hasChevron
-          />
-          <View style={styles.separator} />
-          <SettingsRow
-            icon="bell.fill"
-            iconColor="#FF3B30"
-            label="Notifications"
-            value="On"
-            hasChevron
-          />
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Preferences</Text>
+        <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
+          <SettingsRow icon="speedometer" iconColor="#FF9500" label="Speed Unit" value="mph" hasChevron colors={colors} />
+          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
+          <SettingsRow icon="moon.fill" iconColor="#AF52DE" label="Map Style" value="Auto" hasChevron colors={colors} />
+          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
+          <SettingsRow icon="bell.fill" iconColor="#FF3B30" label="Notifications" value="On" hasChevron colors={colors} />
         </View>
       </View>
 
       {/* Account */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account</Text>
-        <View style={styles.card}>
-          <SettingsRow
-            icon="person.text.rectangle.fill"
-            iconColor="#8E8E93"
-            label="Username"
-            value="@username"
-          />
-          <View style={styles.separator} />
-          <SettingsRow
-            icon="envelope.fill"
-            iconColor="#8E8E93"
-            label="Email"
-            value="user@email.com"
-          />
-          <View style={styles.separator} />
-          <SettingsRow
-            icon="key.fill"
-            iconColor="#8E8E93"
-            label="Change Password"
-            hasChevron
-          />
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account</Text>
+        <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
+          <SettingsRow icon="person.text.rectangle.fill" iconColor="#8E8E93" label="Username" value="@username" colors={colors} />
+          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
+          <SettingsRow icon="envelope.fill" iconColor="#8E8E93" label="Email" value="user@email.com" colors={colors} />
+          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
+          <SettingsRow icon="key.fill" iconColor="#8E8E93" label="Change Password" hasChevron colors={colors} />
         </View>
       </View>
 
       {/* About */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>About</Text>
-        <View style={styles.card}>
-          <SettingsRow
-            icon="info.circle.fill"
-            iconColor="#8E8E93"
-            label="Version"
-            value="1.0.0"
-          />
-          <View style={styles.separator} />
-          <SettingsRow
-            icon="doc.text.fill"
-            iconColor="#8E8E93"
-            label="Terms of Service"
-            hasChevron
-          />
-          <View style={styles.separator} />
-          <SettingsRow
-            icon="hand.raised.fill"
-            iconColor="#8E8E93"
-            label="Privacy Policy"
-            hasChevron
-          />
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
+        <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
+          <SettingsRow icon="info.circle.fill" iconColor="#8E8E93" label="Version" value="1.0.0" colors={colors} />
+          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
+          <SettingsRow icon="doc.text.fill" iconColor="#8E8E93" label="Terms of Service" hasChevron colors={colors} />
+          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
+          <SettingsRow icon="hand.raised.fill" iconColor="#8E8E93" label="Privacy Policy" hasChevron colors={colors} />
         </View>
       </View>
 
@@ -136,22 +73,24 @@ function SettingsRow({
   label,
   value,
   hasChevron,
+  colors,
 }: {
   icon: string;
   iconColor: string;
   label: string;
   value?: string;
   hasChevron?: boolean;
+  colors: ReturnType<typeof useSheetColors>;
 }) {
   return (
     <Pressable style={styles.row}>
       <View style={[styles.rowIcon, { backgroundColor: `${iconColor}18` }]}>
         <SymbolView name={icon as any} tintColor={iconColor} size={16} />
       </View>
-      <Text style={styles.rowLabel}>{label}</Text>
-      {value && <Text style={styles.rowValue}>{value}</Text>}
+      <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{label}</Text>
+      {value && <Text style={[styles.rowValue, { color: colors.textSecondary }]}>{value}</Text>}
       {hasChevron && (
-        <SymbolView name="chevron.right" tintColor="#48484A" size={12} />
+        <SymbolView name="chevron.right" tintColor={colors.chevron} size={12} />
       )}
     </Pressable>
   );
@@ -169,7 +108,6 @@ const styles = StyleSheet.create({
   pageTitle: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
     letterSpacing: -0.4,
     marginBottom: 20,
   },
@@ -179,21 +117,18 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#8E8E93",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 8,
     marginLeft: 4,
   },
   card: {
-    backgroundColor: "rgba(255, 255, 255, 0.04)",
     borderRadius: 14,
     paddingHorizontal: 4,
     paddingVertical: 4,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
     marginLeft: 48,
   },
   row: {
@@ -214,11 +149,9 @@ const styles = StyleSheet.create({
   rowLabel: {
     flex: 1,
     fontSize: 15,
-    color: "#FFFFFF",
   },
   rowValue: {
     fontSize: 15,
-    color: "#8E8E93",
   },
   deleteButton: {
     alignItems: "center",
