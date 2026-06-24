@@ -70,6 +70,7 @@ type TrackingState = "off" | "follow" | "followHeading" | "driving";
 
 export function LiveMap({ drivers, onCellsChanged, onDriverSelected }: LiveMapProps) {
   const mapRef = useRef<MapView>(null);
+  const cameraRef = useRef<Camera>(null);
   const { handleCameraChanged } = useViewportCells(onCellsChanged);
   const [tracking, setTracking] = useState<TrackingState>("off");
   const [show3d, setShow3d] = useState(false);
@@ -110,8 +111,13 @@ export function LiveMap({ drivers, onCellsChanged, onDriverSelected }: LiveMapPr
   // Cycle: off → follow → followHeading → off
   const handleLocatePress = useCallback(() => {
     setTracking((prev) => {
-      if (prev === "off") return "follow";
+      if (prev === "off") {
+        cameraRef.current?.setCamera({ heading: 0, animationDuration: 600, animationMode: "easeTo" });
+        return "follow";
+      }
       if (prev === "follow") return "followHeading";
+      // Returning to off from followHeading — animate back to north
+      cameraRef.current?.setCamera({ heading: 0, animationDuration: 600, animationMode: "easeTo" });
       return "off";
     });
   }, []);
@@ -168,7 +174,7 @@ export function LiveMap({ drivers, onCellsChanged, onDriverSelected }: LiveMapPr
     }
   })();
 
-  const followPitch = isDriving ? 75 : show3d ? 50 : 0;
+  const followPitch = isDriving ? 65 : show3d ? 50 : 0;
   const followZoom = isDriving ? 17.5 : 13.5;
 
   const lightPreset = useMemo(() => getLightPreset(), []);
@@ -211,6 +217,7 @@ export function LiveMap({ drivers, onCellsChanged, onDriverSelected }: LiveMapPr
         />
 
         <Camera
+          ref={cameraRef}
           defaultSettings={{
             centerCoordinate: [...DEFAULT_CAMERA.centerCoordinate],
             zoomLevel: DEFAULT_CAMERA.zoomLevel,
@@ -220,8 +227,8 @@ export function LiveMap({ drivers, onCellsChanged, onDriverSelected }: LiveMapPr
           followUserMode={followUserMode}
           followZoomLevel={followZoom}
           followPitch={followPitch}
-          animationDuration={isDriving ? 300 : 500}
-          
+          animationMode="easeTo"
+          animationDuration={isDriving ? 300 : 600}
         />
 
         <LocationPuck
