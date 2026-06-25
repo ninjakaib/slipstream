@@ -20,13 +20,13 @@ Protocol:
 """
 
 import json
-import logging
 import uuid
 
 import jwt
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from slipstream.auth import decode_access_token
+from slipstream.logging import get_logger
 from slipstream.spatial.handlers import (
     handle_disconnect,
     handle_location_update,
@@ -34,7 +34,7 @@ from slipstream.spatial.handlers import (
 )
 from slipstream.spatial.store import spatial_store, INDEX_RESOLUTIONS
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["spatial"])
 
@@ -102,7 +102,9 @@ async def spatial_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
     conn = spatial_store.connect(user_id, username, websocket)
 
-    logger.info(f"Spatial WS connected: {username} ({user_id})")
+    # Bind user context to a connection-scoped logger
+    log = logger.bind(user_id=str(user_id), username=username)
+    log.info("websocket.connected")
 
     # --- Message Loop ---
     last_location_ts: float = 0.0
@@ -121,6 +123,8 @@ async def spatial_websocket(websocket: WebSocket) -> None:
 
             msg_type = message.get("type")
             msg_payload = message.get("payload", {})
+
+            log.debug("websocket.message_received", msg_type=msg_type)
 
             try:
                 if msg_type == "location_update":
@@ -145,8 +149,10 @@ async def spatial_websocket(websocket: WebSocket) -> None:
             except WebSocketDisconnect:
                 raise
             except Exception as e:
-                logger.error(
-                    f"Error handling '{msg_type}' for {username}: {e}",
+                log.warning(
+                    "websocket.message_error",
+                    msg_type=msg_type,
+                    error=str(e),
                     exc_info=True,
                 )
                 try:
@@ -159,10 +165,14 @@ async def spatial_websocket(websocket: WebSocket) -> None:
                 except Exception:
                     raise WebSocketDisconnect(code=1011)
 
-    except WebSocketDisconnect:
-        logger.info(f"Spatial WS disconnected: {username} ({user_id})")
+    except WebSocketDisconnect as exc:
+        log.info(
+            "websocket.disconnected",
+            close_code=exc.code,
+            reason=exc.reason or "client initiated",
+        )
     except Exception as e:
-        logger.error(f"Spatial WS error for {username}: {e}", exc_info=True)
+        log.warning("websocket.error", error=str(e), exc_info=True)
     finally:
         await handle_disconnect(user_id, spatial_store)
-        logger.info(f"Spatial WS cleaned up: {username} ({user_id})")
+        log.info("websocket.cleanup_complete")

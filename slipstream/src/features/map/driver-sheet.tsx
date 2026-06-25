@@ -41,6 +41,12 @@ export function DriverSheet({ userId, onClose, onInviteToConvoy }: DriverSheetPr
     onInviteToConvoy?.(userId);
   }, [userId, onInviteToConvoy]);
 
+  useEffect(() => {
+    if (!loading && !profile) {
+      onClose();
+    }
+  }, [loading, profile, onClose]);
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -52,7 +58,6 @@ export function DriverSheet({ userId, onClose, onInviteToConvoy }: DriverSheetPr
   }
 
   if (!profile) {
-    onClose();
     return null;
   }
 

@@ -1,6 +1,5 @@
 """SlipStream FastAPI application."""
 
-import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
@@ -8,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
 from slipstream.config import settings
+from slipstream.logging import setup_logging, get_logger, RequestLoggingMiddleware
 from slipstream.routers.auth import router as auth_router
 from slipstream.routers.users import router as users_router
 from slipstream.routers.cars import router as cars_router
@@ -15,12 +15,9 @@ from slipstream.routers.friends import router as friends_router
 from slipstream.routers.convoys import router as convoys_router
 from slipstream.spatial import spatial_router
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG if settings.debug else logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-)
-logger = logging.getLogger(__name__)
+# Configure structured logging (must happen before any logger is used)
+setup_logging()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -56,6 +53,12 @@ app = FastAPI(
     generate_unique_id_function=_generate_unique_id,
     # lifespan=lifespan,
 )
+
+# ---------------------------------------------------------------------------
+# Middleware (outermost first — request logging wraps everything)
+# ---------------------------------------------------------------------------
+
+app.add_middleware(RequestLoggingMiddleware)
 
 # ---------------------------------------------------------------------------
 # Routers

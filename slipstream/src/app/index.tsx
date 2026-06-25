@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 
 import { useAuth } from "@/contexts/auth-context";
+import { DebugPanel } from "@/components/debug-panel";
 import { DriverSheet } from "@/features/map/driver-sheet";
 import { LiveMap } from "@/features/map/live-map";
 import ProfileScreen from "@/features/profile/profile-screen";
@@ -16,7 +17,7 @@ export default function MapScreen() {
   const { session } = useAuth();
   const token = session?.accessToken ?? null;
 
-  const { drivers, status, sendViewportUpdate, sendLocationUpdate } =
+  const { drivers, status, sendViewportUpdate, sendLocationUpdate, stats } =
     useWebSocket(SERVER_URL, token);
 
   useLocation({
@@ -25,12 +26,14 @@ export default function MapScreen() {
   });
 
   const [currentResolution, setCurrentResolution] = useState(0);
+  const [cellCount, setCellCount] = useState(0);
   const [profileVisible, setProfileVisible] = useState(false);
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
 
   const handleCellsChanged = useCallback(
     (cells: string[], resolution: number) => {
       setCurrentResolution(resolution);
+      setCellCount(cells.length);
       sendViewportUpdate(cells);
     },
     [sendViewportUpdate],
@@ -95,6 +98,16 @@ export default function MapScreen() {
       </Modal>
 
       <MapSheet />
+
+      {__DEV__ && (
+        <DebugPanel
+          status={status}
+          driverCount={Object.keys(drivers).length}
+          cellCount={cellCount}
+          resolution={currentResolution}
+          stats={stats}
+        />
+      )}
     </View>
   );
 }

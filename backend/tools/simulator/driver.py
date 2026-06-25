@@ -41,8 +41,8 @@ class SimulatedDriver:
         self.token = token
         self.ws_url = ws_url
         self.update_interval = update_interval
-        # Deterministic UUID from index — same index always produces same user_id
-        self.user_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"sim_driver_{driver_index:04d}")
+        # Deterministic UUID from index — must match mint_token() in __main__.py
+        self.user_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"sim_{driver_index:04d}")
         self.username = f"sim_{driver_index:04d}"
 
         # Randomize base speed for this driver
