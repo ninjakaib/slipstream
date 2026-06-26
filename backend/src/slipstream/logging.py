@@ -90,6 +90,9 @@ def _setup_structlog() -> None:
     logging.getLogger("websockets").setLevel(logging.WARNING)
     logging.getLogger("websockets.protocol").setLevel(logging.WARNING)
     logging.getLogger("websockets.server").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
 def setup_logging() -> None:

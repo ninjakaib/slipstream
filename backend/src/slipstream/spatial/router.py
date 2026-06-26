@@ -25,7 +25,10 @@ import uuid
 import jwt
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from fastapi import HTTPException
+
 from slipstream.auth import decode_access_token
+from slipstream.config import settings
 from slipstream.logging import get_logger
 from slipstream.spatial.handlers import (
     handle_disconnect,
@@ -56,6 +59,58 @@ async def get_spatial_config() -> dict:
         "finest_resolution": max(INDEX_RESOLUTIONS),
         "coarsest_resolution": min(INDEX_RESOLUTIONS),
         "max_viewport_cells": 64,
+    }
+
+
+# ---------------------------------------------------------------------------
+# REST: Debug dump (dev only)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/spatial/debug")
+async def debug_spatial_store() -> dict:
+    """Dump the full state of the in-memory spatial store. Only available when DEBUG=true."""
+    if not settings.debug:
+        raise HTTPException(status_code=404)
+
+    uid_to_username = {
+        uid: conn.username for uid, conn in spatial_store._connections.items()
+    }
+
+    def resolve(uid):
+        return uid_to_username.get(uid, str(uid))
+
+    users = {}
+    for uid, conn in spatial_store._connections.items():
+        pos = spatial_store._positions.get(uid)
+        entry: dict = {"watching_cells": sorted(conn.viewport_cells)}
+        if pos:
+            entry["position"] = {
+                "lat": pos.lat,
+                "lng": pos.lng,
+                "heading": pos.heading,
+                "speed": pos.speed,
+                "status": pos.status,
+                "cells": sorted(pos.cells),
+                "updated_at": pos.updated_at,
+            }
+        users[conn.username] = entry
+
+    # Who can see whom — derived from cell overlap
+    visibility = {}
+    for uid, conn in spatial_store._connections.items():
+        visible_drivers = set()
+        for cell in conn.viewport_cells:
+            for member_uid in spatial_store._cell_members.get(cell, set()):
+                if member_uid != uid:
+                    visible_drivers.add(resolve(member_uid))
+        if visible_drivers:
+            visibility[conn.username] = sorted(visible_drivers)
+
+    return {
+        "stats": spatial_store.stats(),
+        "users": users,
+        "visibility": visibility,
     }
 
 
