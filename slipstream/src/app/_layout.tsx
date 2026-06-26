@@ -2,9 +2,11 @@ import "@/polyfills";
 
 import { ActivityIndicator, View, useColorScheme } from "react-native";
 import { DarkTheme, DefaultTheme, ThemeProvider, Stack } from "expo-router";
+import { QueryClientProvider } from "@tanstack/react-query";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
+import { queryClient } from "@/lib/query-client";
 import LoginScreen from "@/features/auth/login-screen";
 
 function RootContent() {
@@ -32,11 +34,13 @@ function RootContent() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <AuthProvider>
-        <AnimatedSplashOverlay />
-        <RootContent />
-      </AuthProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+        <AuthProvider>
+          <AnimatedSplashOverlay />
+          <RootContent />
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }

@@ -1,9 +1,48 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SymbolView } from "expo-symbols";
 import { useSheetColors } from "@/hooks/use-sheet-colors";
+import {
+  useFriends,
+  useFriendRequests,
+  useAcceptFriend,
+  useDeclineFriend,
+  useSendFriendRequest,
+} from "@/hooks/queries/use-friends";
+import { useUserSearch } from "@/hooks/queries/use-user-search";
+import { useDriversStore } from "@/stores/drivers-store";
+import { formatCarName } from "@/lib/format";
+import type { FriendProfile, FriendRequestOut, UserSearchResult } from "@/lib/api/types.gen";
 
 export function SocialPage() {
   const colors = useSheetColors();
+  const { data: friends, isLoading: friendsLoading } = useFriends();
+  const { data: requests } = useFriendRequests();
+  const driverIds = useDriversStore((s) => s.driverIds);
+
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showRequests, setShowRequests] = useState(false);
+
+  const onlineFriends = friends?.filter((f) => driverIds.has(f.id)) ?? [];
+  const offlineFriends = friends?.filter((f) => !driverIds.has(f.id)) ?? [];
+  const requestCount = requests?.length ?? 0;
+
+  if (friendsLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
     <ScrollView
@@ -11,70 +50,251 @@ export function SocialPage() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* Header with search action */}
       <View style={styles.header}>
         <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Friends</Text>
-        <Pressable style={styles.addButton} accessibilityLabel="Find friends">
-          <SymbolView name="person.badge.plus" tintColor="#007AFF" size={20} />
+        <Pressable
+          style={[styles.addButton, showSearch && styles.addButtonActive]}
+          onPress={() => {
+            setShowSearch(!showSearch);
+            if (showSearch) setSearchQuery("");
+          }}
+        >
+          <SymbolView
+            name={showSearch ? "xmark" : "person.badge.plus"}
+            tintColor="#007AFF"
+            size={showSearch ? 16 : 20}
+          />
         </Pressable>
       </View>
 
-      {/* Friend Requests Banner */}
-      <Pressable style={[styles.requestsBanner, { backgroundColor: colors.cardBackgroundElevated }]}>
-        <View style={styles.requestsBadge}>
-          <Text style={styles.requestsBadgeText}>2</Text>
-        </View>
-        <Text style={[styles.requestsText, { color: colors.textPrimary }]}>Friend Requests</Text>
-        <SymbolView name="chevron.right" tintColor={colors.textTertiary} size={14} />
-      </Pressable>
+      {showSearch && (
+        <SearchSection
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          colors={colors}
+        />
+      )}
 
-      {/* Online Friends */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Online — 3</Text>
-        <View style={styles.friendsList}>
-          <FriendRow username="mikeGTR" displayName="Mike Chen" car="2024 GT-R NISMO" status="driving" colors={colors} />
-          <FriendRow username="sarahM4" displayName="Sarah Kim" car="2024 M4 Competition" status="parked" colors={colors} />
-          <FriendRow username="alexRS" displayName="Alex Rivera" car="2022 911 GT3 RS" status="driving" colors={colors} />
-        </View>
-      </View>
+      {requestCount > 0 && (
+        <Pressable
+          style={[styles.requestsBanner, { backgroundColor: colors.cardBackgroundElevated }]}
+          onPress={() => setShowRequests(!showRequests)}
+        >
+          <View style={styles.requestsBadge}>
+            <Text style={styles.requestsBadgeText}>{requestCount}</Text>
+          </View>
+          <Text style={[styles.requestsText, { color: colors.textPrimary }]}>Friend Requests</Text>
+          <SymbolView
+            name={showRequests ? "chevron.down" : "chevron.right"}
+            tintColor={colors.textTertiary}
+            size={14}
+          />
+        </Pressable>
+      )}
 
-      {/* Offline Friends */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Offline</Text>
-        <View style={styles.friendsList}>
-          <FriendRow username="jayZ4M" displayName="Jay Martinez" car="2023 BMW Z4 M" status="offline" colors={colors} />
-          <FriendRow username="devSupra" displayName="Dev Patel" car="2024 GR Supra" status="offline" colors={colors} />
+      {showRequests && requests && requests.length > 0 && (
+        <View style={styles.requestsList}>
+          {requests.map((req) => (
+            <RequestRow key={req.request_id} request={req} colors={colors} />
+          ))}
         </View>
+      )}
+
+      {onlineFriends.length > 0 && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Online — {onlineFriends.length}
+          </Text>
+          <View style={styles.friendsList}>
+            {onlineFriends.map((friend) => (
+              <FriendRow key={friend.id} friend={friend} status="driving" colors={colors} />
+            ))}
+          </View>
+        </View>
+      )}
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+          {onlineFriends.length > 0 ? "Offline" : `All Friends — ${offlineFriends.length}`}
+        </Text>
+        {offlineFriends.length === 0 && friends?.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+              No friends yet. Tap + to search and add friends.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.friendsList}>
+            {offlineFriends.map((friend) => (
+              <FriendRow key={friend.id} friend={friend} status="offline" colors={colors} />
+            ))}
+          </View>
+        )}
       </View>
     </ScrollView>
   );
 }
 
+function SearchSection({
+  query,
+  onQueryChange,
+  colors,
+}: {
+  query: string;
+  onQueryChange: (q: string) => void;
+  colors: ReturnType<typeof useSheetColors>;
+}) {
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const { data: results, isLoading } = useUserSearch(debouncedQuery);
+  const sendRequest = useSendFriendRequest();
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+
+  const handleChangeText = (text: string) => {
+    onQueryChange(text);
+    clearTimeout((handleChangeText as any)._timer);
+    (handleChangeText as any)._timer = setTimeout(() => {
+      setDebouncedQuery(text.trim());
+    }, 300);
+  };
+
+  const handleSend = (userId: string) => {
+    sendRequest.mutate(userId, {
+      onSuccess: () => setSentIds((prev) => new Set([...prev, userId])),
+    });
+  };
+
+  return (
+    <View style={styles.searchSection}>
+      <View style={[styles.searchBar, { backgroundColor: colors.cardBackgroundElevated }]}>
+        <SymbolView name="magnifyingglass" tintColor={colors.textTertiary} size={16} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.textPrimary }]}
+          placeholder="Search by username..."
+          placeholderTextColor={colors.textTertiary}
+          value={query}
+          onChangeText={handleChangeText}
+          autoFocus
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+      {isLoading && <ActivityIndicator style={styles.searchLoading} />}
+      {results && results.length > 0 && (
+        <View style={styles.searchResults}>
+          {results.map((user) => (
+            <SearchResultRow
+              key={user.id}
+              user={user}
+              sent={sentIds.has(user.id)}
+              onSend={() => handleSend(user.id)}
+              colors={colors}
+            />
+          ))}
+        </View>
+      )}
+      {debouncedQuery.length >= 2 && !isLoading && results?.length === 0 && (
+        <Text style={[styles.noResults, { color: colors.textSecondary }]}>No users found</Text>
+      )}
+    </View>
+  );
+}
+
+function SearchResultRow({
+  user,
+  sent,
+  onSend,
+  colors,
+}: {
+  user: UserSearchResult;
+  sent: boolean;
+  onSend: () => void;
+  colors: ReturnType<typeof useSheetColors>;
+}) {
+  return (
+    <View style={styles.friendRow}>
+      <View style={[styles.avatar, { backgroundColor: colors.avatarBackground }]}>
+        <SymbolView name="person.fill" tintColor={colors.textTertiary} size={18} />
+      </View>
+      <View style={styles.friendInfo}>
+        <Text style={[styles.friendName, { color: colors.textPrimary }]}>
+          {user.display_name ?? user.username}
+        </Text>
+        <Text style={[styles.friendMeta, { color: colors.textSecondary }]}>@{user.username}</Text>
+      </View>
+      <Pressable
+        style={[styles.sendButton, sent && styles.sendButtonSent]}
+        onPress={onSend}
+        disabled={sent}
+      >
+        <Text style={[styles.sendButtonText, sent && styles.sendButtonTextSent]}>
+          {sent ? "Sent" : "Add"}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function RequestRow({
+  request,
+  colors,
+}: {
+  request: FriendRequestOut;
+  colors: ReturnType<typeof useSheetColors>;
+}) {
+  const accept = useAcceptFriend();
+  const decline = useDeclineFriend();
+  const [handled, setHandled] = useState(false);
+
+  if (handled) return null;
+
+  return (
+    <View style={styles.friendRow}>
+      <View style={[styles.avatar, { backgroundColor: colors.avatarBackground }]}>
+        <SymbolView name="person.fill" tintColor={colors.textTertiary} size={18} />
+      </View>
+      <View style={styles.friendInfo}>
+        <Text style={[styles.friendName, { color: colors.textPrimary }]}>
+          {request.from_user.display_name ?? request.from_user.username}
+        </Text>
+        <Text style={[styles.friendMeta, { color: colors.textSecondary }]}>
+          @{request.from_user.username}
+        </Text>
+      </View>
+      <View style={styles.requestActions}>
+        <Pressable
+          style={styles.acceptButton}
+          onPress={() => {
+            accept.mutate(request.request_id);
+            setHandled(true);
+          }}
+        >
+          <SymbolView name="checkmark" tintColor="#FFFFFF" size={14} />
+        </Pressable>
+        <Pressable
+          style={styles.declineButton}
+          onPress={() => {
+            decline.mutate(request.request_id);
+            setHandled(true);
+          }}
+        >
+          <SymbolView name="xmark" tintColor="#8E8E93" size={14} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function FriendRow({
-  displayName,
-  car,
+  friend,
   status,
   colors,
 }: {
-  username: string;
-  displayName: string;
-  car: string;
-  status: "driving" | "parked" | "offline";
+  friend: FriendProfile;
+  status: "driving" | "offline";
   colors: ReturnType<typeof useSheetColors>;
 }) {
-  const statusColor =
-    status === "driving"
-      ? "#34C759"
-      : status === "parked"
-        ? "#FF9500"
-        : "#48484A";
-
-  const statusLabel =
-    status === "driving"
-      ? "Driving"
-      : status === "parked"
-        ? "Parked"
-        : "Offline";
+  const statusColor = status === "driving" ? "#34C759" : "#48484A";
+  const carText = friend.active_car ? formatCarName(friend.active_car) : undefined;
 
   return (
     <Pressable style={styles.friendRow}>
@@ -82,15 +302,15 @@ function FriendRow({
         <SymbolView name="person.fill" tintColor={colors.textTertiary} size={18} />
         <View style={[styles.friendStatusDot, { backgroundColor: statusColor, borderColor: colors.borderSubtle }]} />
       </View>
-
       <View style={styles.friendInfo}>
-        <Text style={[styles.friendName, { color: colors.textPrimary }]}>{displayName}</Text>
+        <Text style={[styles.friendName, { color: colors.textPrimary }]}>
+          {friend.display_name ?? friend.username}
+        </Text>
         <Text style={[styles.friendMeta, { color: colors.textSecondary }]}>
-          {car} · {statusLabel}
+          {carText ? `${carText} · ` : ""}@{friend.username}
         </Text>
       </View>
-
-      {status !== "offline" && (
+      {status === "driving" && (
         <SymbolView name="location.fill" tintColor={statusColor} size={14} />
       )}
     </Pressable>
@@ -105,6 +325,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 80,
   },
   header: {
     flexDirection: "row",
@@ -125,13 +351,61 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  addButtonActive: {
+    backgroundColor: "rgba(0, 122, 255, 0.25)",
+  },
+  searchSection: {
+    marginBottom: 16,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    padding: 0,
+  },
+  searchLoading: {
+    marginTop: 12,
+  },
+  searchResults: {
+    marginTop: 8,
+    gap: 4,
+  },
+  noResults: {
+    textAlign: "center",
+    marginTop: 12,
+    fontSize: 14,
+  },
+  sendButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "#007AFF",
+  },
+  sendButtonSent: {
+    backgroundColor: "rgba(142, 142, 147, 0.12)",
+  },
+  sendButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  sendButtonTextSent: {
+    color: "#8E8E93",
+  },
   requestsBanner: {
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    marginBottom: 20,
+    marginBottom: 12,
     gap: 10,
   },
   requestsBadge: {
@@ -151,6 +425,30 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: "500",
+  },
+  requestsList: {
+    marginBottom: 16,
+    gap: 4,
+  },
+  requestActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  acceptButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#34C759",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  declineButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(142, 142, 147, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   section: {
     marginBottom: 24,
@@ -201,5 +499,13 @@ const styles = StyleSheet.create({
   friendMeta: {
     fontSize: 13,
     marginTop: 2,
+  },
+  emptyState: {
+    paddingVertical: 20,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: "center",
   },
 });

@@ -1,9 +1,31 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 import { useSheetColors } from "@/hooks/use-sheet-colors";
+import { useAuth } from "@/contexts/auth-context";
+import { useProfile } from "@/hooks/queries/use-profile";
+import { useCars, useActivateCar } from "@/hooks/queries/use-cars";
+import { useFriends } from "@/hooks/queries/use-friends";
+import { formatCarName } from "@/lib/format";
+import type { CarResponse } from "@/lib/api/types.gen";
 
 export function ProfilePage() {
   const colors = useSheetColors();
+  const { logout } = useAuth();
+  const { data: profile, isLoading: profileLoading } = useProfile();
+  const { data: cars, isLoading: carsLoading } = useCars();
+  const { data: friends } = useFriends();
+  const activateCar = useActivateCar();
+
+  if (profileLoading || carsLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  const activeCar = cars?.find((c) => c.is_active);
+  const displayCars = cars?.slice(0, 3) ?? [];
 
   return (
     <ScrollView
@@ -11,62 +33,74 @@ export function ProfilePage() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* Profile Header */}
       <View style={styles.header}>
         <View style={styles.avatarContainer}>
           <View style={[styles.avatar, { backgroundColor: colors.avatarBackground }]}>
             <SymbolView name="person.fill" tintColor={colors.textTertiary} size={32} />
           </View>
-          <Pressable style={[styles.editAvatarButton, { borderColor: colors.borderSubtle }]}>
-            <SymbolView name="camera.fill" tintColor="#FFFFFF" size={10} />
-          </Pressable>
         </View>
-        <Text style={[styles.displayName, { color: colors.textPrimary }]}>Driver</Text>
-        <Text style={[styles.username, { color: colors.textSecondary }]}>@username</Text>
+        <Text style={[styles.displayName, { color: colors.textPrimary }]}>
+          {profile?.display_name ?? profile?.username ?? "Driver"}
+        </Text>
+        <Text style={[styles.username, { color: colors.textSecondary }]}>
+          @{profile?.username}
+        </Text>
       </View>
 
-      {/* Active Car Card */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Active Car</Text>
-        <Pressable style={[styles.carCard, { backgroundColor: colors.cardBackgroundElevated }]}>
-          <View style={styles.carIcon}>
-            <SymbolView name="car.fill" tintColor="#57C7FF" size={22} />
+      {activeCar && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Active Car</Text>
+          <View style={[styles.carCard, { backgroundColor: colors.cardBackgroundElevated }]}>
+            <View style={styles.carIcon}>
+              <SymbolView name="car.fill" tintColor="#57C7FF" size={22} />
+            </View>
+            <View style={styles.carInfo}>
+              <Text style={[styles.carName, { color: colors.textPrimary }]}>
+                {formatCarName(activeCar)}
+              </Text>
+              <Text style={[styles.carColor, { color: colors.textSecondary }]}>
+                {activeCar.color}
+              </Text>
+            </View>
           </View>
-          <View style={styles.carInfo}>
-            <Text style={[styles.carName, { color: colors.textPrimary }]}>2024 Nissan GT-R NISMO</Text>
-            <Text style={[styles.carColor, { color: colors.textSecondary }]}>Pearl White · 600 HP</Text>
+        </View>
+      )}
+
+      {displayCars.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Garage</Text>
+            {(cars?.length ?? 0) > 3 && (
+              <Pressable>
+                <Text style={styles.seeAll}>See All</Text>
+              </Pressable>
+            )}
           </View>
-          <SymbolView name="chevron.right" tintColor={colors.chevron} size={14} />
-        </Pressable>
-      </View>
-
-      {/* Garage */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Garage</Text>
-          <Pressable>
-            <Text style={styles.seeAll}>See All</Text>
-          </Pressable>
+          <View style={styles.garageGrid}>
+            {displayCars.map((car) => (
+              <GarageSlot
+                key={car.id}
+                car={car}
+                colors={colors}
+                onPress={() => {
+                  if (!car.is_active) activateCar.mutate(car.id);
+                }}
+              />
+            ))}
+          </View>
         </View>
-        <View style={styles.garageGrid}>
-          <GarageSlot car="2024 GT-R NISMO" active colors={colors} />
-          <GarageSlot car="1999 Skyline R34" colors={colors} />
-          <GarageSlot colors={colors} />
-        </View>
-      </View>
+      )}
 
-      {/* Stats */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Stats</Text>
         <View style={styles.statsRow}>
-          <StatCard value="12" label="Drives" colors={colors} />
-          <StatCard value="8" label="Friends" colors={colors} />
-          <StatCard value="3" label="Convoys" colors={colors} />
+          <StatCard value={String(friends?.length ?? 0)} label="Friends" colors={colors} />
+          <StatCard value="--" label="Drives" colors={colors} />
+          <StatCard value="--" label="Convoys" colors={colors} />
         </View>
       </View>
 
-      {/* Log Out */}
-      <Pressable style={styles.logoutButton}>
+      <Pressable style={styles.logoutButton} onPress={logout}>
         <SymbolView name="rectangle.portrait.and.arrow.right" tintColor="#FF3B30" size={16} />
         <Text style={styles.logoutText}>Log Out</Text>
       </Pressable>
@@ -74,27 +108,32 @@ export function ProfilePage() {
   );
 }
 
-function GarageSlot({ car, active, colors }: { car?: string; active?: boolean; colors: ReturnType<typeof useSheetColors> }) {
+function GarageSlot({
+  car,
+  colors,
+  onPress,
+}: {
+  car: CarResponse;
+  colors: ReturnType<typeof useSheetColors>;
+  onPress: () => void;
+}) {
   return (
-    <View style={[styles.garageSlot, { backgroundColor: colors.cardBackground }, active && styles.garageSlotActive]}>
-      {car ? (
-        <>
-          <SymbolView
-            name="car.side.fill"
-            tintColor={active ? "#57C7FF" : colors.textTertiary}
-            size={20}
-          />
-          <Text style={[styles.garageCarName, { color: colors.textSecondary }, active && styles.garageCarNameActive]} numberOfLines={1}>
-            {car}
-          </Text>
-        </>
-      ) : (
-        <>
-          <SymbolView name="plus" tintColor={colors.chevron} size={20} />
-          <Text style={[styles.garageAddText, { color: colors.chevron }]}>Add Car</Text>
-        </>
-      )}
-    </View>
+    <Pressable
+      style={[styles.garageSlot, { backgroundColor: colors.cardBackground }, car.is_active && styles.garageSlotActive]}
+      onPress={onPress}
+    >
+      <SymbolView
+        name="car.side.fill"
+        tintColor={car.is_active ? "#57C7FF" : colors.textTertiary}
+        size={20}
+      />
+      <Text
+        style={[styles.garageCarName, { color: colors.textSecondary }, car.is_active && styles.garageCarNameActive]}
+        numberOfLines={1}
+      >
+        {formatCarName(car)}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -116,6 +155,12 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 40,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 80,
+  },
   header: {
     alignItems: "center",
     marginBottom: 28,
@@ -130,18 +175,6 @@ const styles = StyleSheet.create({
     borderRadius: 36,
     alignItems: "center",
     justifyContent: "center",
-  },
-  editAvatarButton: {
-    position: "absolute",
-    bottom: 0,
-    right: -2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#007AFF",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
   },
   displayName: {
     fontSize: 22,
@@ -227,10 +260,6 @@ const styles = StyleSheet.create({
   },
   garageCarNameActive: {
     color: "#57C7FF",
-  },
-  garageAddText: {
-    fontSize: 11,
-    fontWeight: "500",
   },
   statsRow: {
     flexDirection: "row",

@@ -1,9 +1,40 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SymbolView } from "expo-symbols";
 import { useSheetColors } from "@/hooks/use-sheet-colors";
+import { useDriversStore } from "@/stores/drivers-store";
+import { useUserSearch } from "@/hooks/queries/use-user-search";
+import { useConvoyState } from "@/hooks/queries/use-convoy";
+import type { UserSearchResult } from "@/lib/api/types.gen";
 
 export function DiscoverPage() {
   const colors = useSheetColors();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const drivers = useDriversStore((s) => s.drivers);
+  const { create: createConvoy } = useConvoyState();
+
+  const { data: searchResults, isLoading: searching } = useUserSearch(debouncedQuery);
+  const isSearching = searchQuery.length > 0;
+
+  const driverList = Object.values(drivers).slice(0, 5);
+  const nearbyCount = Object.keys(drivers).length;
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    clearTimeout((handleSearchChange as any)._timer);
+    (handleSearchChange as any)._timer = setTimeout(() => {
+      setDebouncedQuery(text.trim());
+    }, 300);
+  };
 
   return (
     <ScrollView
@@ -11,42 +42,114 @@ export function DiscoverPage() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* Search Bar */}
       <View style={[styles.searchBar, { backgroundColor: colors.cardBackgroundElevated }]}>
         <SymbolView name="magnifyingglass" tintColor={colors.textTertiary} size={16} />
-        <Text style={[styles.searchPlaceholder, { color: colors.textSecondary }]}>
-          Search places or drivers...
-        </Text>
+        <TextInput
+          style={[styles.searchInput, { color: colors.textPrimary }]}
+          placeholder="Search drivers..."
+          placeholderTextColor={colors.textSecondary}
+          value={searchQuery}
+          onChangeText={handleSearchChange}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
+          <Pressable onPress={() => { setSearchQuery(""); setDebouncedQuery(""); }}>
+            <SymbolView name="xmark.circle.fill" tintColor={colors.textTertiary} size={18} />
+          </Pressable>
+        )}
       </View>
 
-      {/* Quick Actions */}
-      <View style={styles.quickActions}>
-        <QuickActionCard icon="plus.circle.fill" label="Start Convoy" color="#34C759" colors={colors} />
-        <QuickActionCard icon="road.lanes" label="Find Drives" color="#007AFF" colors={colors} />
-        <QuickActionCard icon="mappin.circle.fill" label="Set Destination" color="#FF9500" colors={colors} />
-      </View>
+      {isSearching ? (
+        <SearchResults results={searchResults} loading={searching} colors={colors} />
+      ) : (
+        <>
+          <View style={styles.quickActions}>
+            <QuickActionCard
+              icon="plus.circle.fill"
+              label="Start Convoy"
+              color="#34C759"
+              colors={colors}
+              onPress={() => createConvoy.mutate(undefined)}
+            />
+            <QuickActionCard icon="road.lanes" label="Find Drives" color="#007AFF" colors={colors} />
+            <QuickActionCard icon="mappin.circle.fill" label="Set Destination" color="#FF9500" colors={colors} />
+          </View>
 
-      {/* Nearby Section */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Nearby Now</Text>
-        <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
-          <NearbyDriverRow username="@mikeGTR" car="2024 Nissan GT-R" distance="0.4 mi" status="driving" colors={colors} />
-          <View style={[styles.rowSeparator, { backgroundColor: colors.separator }]} />
-          <NearbyDriverRow username="@sarahM4" car="2024 BMW M4" distance="1.2 mi" status="parked" colors={colors} />
-          <View style={[styles.rowSeparator, { backgroundColor: colors.separator }]} />
-          <NearbyDriverRow username="@alexRS" car="2022 Porsche 911" distance="2.8 mi" status="driving" colors={colors} />
-        </View>
-      </View>
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+              Nearby Now{nearbyCount > 0 ? ` — ${nearbyCount}` : ""}
+            </Text>
+            {driverList.length === 0 ? (
+              <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                  No drivers nearby. Check back when you're out driving.
+                </Text>
+              </View>
+            ) : (
+              <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
+                {driverList.map((driver, index) => (
+                  <View key={driver.user_id}>
+                    {index > 0 && <View style={[styles.rowSeparator, { backgroundColor: colors.separator }]} />}
+                    <NearbyDriverRow driver={driver} colors={colors} />
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
 
-      {/* Popular Drives */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Popular Drives</Text>
-        <View style={styles.driveCards}>
-          <DriveCard title="Pacific Coast Highway" subtitle="Malibu → Santa Barbara" distance="92 mi" colors={colors} />
-          <DriveCard title="Mulholland Drive" subtitle="Hollywood → Calabasas" distance="21 mi" colors={colors} />
-        </View>
-      </View>
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Popular Drives</Text>
+            <View style={styles.driveCards}>
+              <DriveCard title="Pacific Coast Highway" subtitle="Malibu → Santa Barbara" distance="92 mi" colors={colors} />
+              <DriveCard title="Mulholland Drive" subtitle="Hollywood → Calabasas" distance="21 mi" colors={colors} />
+            </View>
+          </View>
+        </>
+      )}
     </ScrollView>
+  );
+}
+
+function SearchResults({
+  results,
+  loading,
+  colors,
+}: {
+  results: UserSearchResult[] | undefined;
+  loading: boolean;
+  colors: ReturnType<typeof useSheetColors>;
+}) {
+  if (loading) {
+    return <ActivityIndicator style={styles.searchLoading} />;
+  }
+
+  if (!results || results.length === 0) {
+    return (
+      <Text style={[styles.noResults, { color: colors.textSecondary }]}>
+        No users found
+      </Text>
+    );
+  }
+
+  return (
+    <View style={styles.searchResultsList}>
+      {results.map((user) => (
+        <Pressable key={user.id} style={styles.searchResultRow}>
+          <View style={[styles.searchAvatar, { backgroundColor: colors.avatarBackground }]}>
+            <SymbolView name="person.fill" tintColor={colors.textTertiary} size={18} />
+          </View>
+          <View style={styles.searchInfo}>
+            <Text style={[styles.searchName, { color: colors.textPrimary }]}>
+              {user.display_name ?? user.username}
+            </Text>
+            <Text style={[styles.searchUsername, { color: colors.textSecondary }]}>
+              @{user.username}
+            </Text>
+          </View>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 
@@ -55,14 +158,16 @@ function QuickActionCard({
   label,
   color,
   colors,
+  onPress,
 }: {
   icon: string;
   label: string;
   color: string;
   colors: ReturnType<typeof useSheetColors>;
+  onPress?: () => void;
 }) {
   return (
-    <Pressable style={[styles.actionCard, { backgroundColor: colors.cardBackgroundElevated }]}>
+    <Pressable style={[styles.actionCard, { backgroundColor: colors.cardBackgroundElevated }]} onPress={onPress}>
       <SymbolView name={icon as any} tintColor={color} size={24} />
       <Text style={[styles.actionLabel, { color: colors.textPrimary }]}>{label}</Text>
     </Pressable>
@@ -70,26 +175,28 @@ function QuickActionCard({
 }
 
 function NearbyDriverRow({
-  username,
-  car,
-  distance,
-  status,
+  driver,
   colors,
 }: {
-  username: string;
-  car: string;
-  distance: string;
-  status: "driving" | "parked";
+  driver: { user_id: string; status: string; speed: number };
   colors: ReturnType<typeof useSheetColors>;
 }) {
+  const isDriving = driver.status === "driving" || driver.speed > 0;
+
   return (
     <View style={styles.driverRow}>
-      <View style={[styles.statusDot, status === "driving" ? styles.dotDriving : styles.dotParked]} />
+      <View style={[styles.statusDot, isDriving ? styles.dotDriving : styles.dotParked]} />
       <View style={styles.driverInfo}>
-        <Text style={[styles.driverUsername, { color: colors.textPrimary }]}>{username}</Text>
-        <Text style={[styles.driverCar, { color: colors.textSecondary }]}>{car}</Text>
+        <Text style={[styles.driverUsername, { color: colors.textPrimary }]}>
+          Driver
+        </Text>
+        <Text style={[styles.driverCar, { color: colors.textSecondary }]}>
+          {isDriving ? `${Math.round(driver.speed)} mph` : "Parked"}
+        </Text>
       </View>
-      <Text style={[styles.driverDistance, { color: colors.textSecondary }]}>{distance}</Text>
+      <Text style={[styles.driverDistance, { color: colors.textSecondary }]}>
+        {isDriving ? "Driving" : "Parked"}
+      </Text>
     </View>
   );
 }
@@ -134,12 +241,50 @@ const styles = StyleSheet.create({
     gap: 10,
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
     marginBottom: 20,
   },
-  searchPlaceholder: {
-    fontSize: 16,
+  searchInput: {
     flex: 1,
+    fontSize: 16,
+    padding: 0,
+  },
+  searchLoading: {
+    marginTop: 40,
+  },
+  noResults: {
+    textAlign: "center",
+    marginTop: 40,
+    fontSize: 14,
+  },
+  searchResultsList: {
+    gap: 4,
+  },
+  searchResultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    gap: 12,
+  },
+  searchAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchInfo: {
+    flex: 1,
+  },
+  searchName: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  searchUsername: {
+    fontSize: 13,
+    marginTop: 2,
   },
   quickActions: {
     flexDirection: "row",
@@ -173,6 +318,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 10,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: "center",
+    paddingVertical: 16,
   },
   rowSeparator: {
     height: StyleSheet.hairlineWidth,

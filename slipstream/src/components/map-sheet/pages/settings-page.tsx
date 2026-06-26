@@ -1,9 +1,56 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 import { useSheetColors } from "@/hooks/use-sheet-colors";
+import { useAuth } from "@/contexts/auth-context";
+import { useProfile, useUpdateProfile } from "@/hooks/queries/use-profile";
+import { deleteAccount } from "@/lib/api/sdk.gen";
+import type { VisibilityMode } from "@/lib/api/types.gen";
+
+const VISIBILITY_CYCLE: VisibilityMode[] = ["on", "friends_only", "ghost"];
+const VISIBILITY_LABELS: Record<VisibilityMode, string> = {
+  on: "Everyone",
+  friends_only: "Friends Only",
+  ghost: "Ghost",
+};
 
 export function SettingsPage() {
   const colors = useSheetColors();
+  const { logout } = useAuth();
+  const { data: profile, isLoading } = useProfile();
+  const updateProfile = useUpdateProfile();
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  const cycleVisibility = () => {
+    if (!profile) return;
+    const currentIndex = VISIBILITY_CYCLE.indexOf(profile.visibility);
+    const next = VISIBILITY_CYCLE[(currentIndex + 1) % VISIBILITY_CYCLE.length];
+    updateProfile.mutate({ visibility: next });
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This will permanently delete your account and all data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await deleteAccount();
+            await logout();
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <ScrollView
@@ -13,54 +60,55 @@ export function SettingsPage() {
     >
       <Text style={[styles.pageTitle, { color: colors.textPrimary }]}>Settings</Text>
 
-      {/* Visibility */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Privacy</Text>
         <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
-          <SettingsRow icon="eye.fill" iconColor="#34C759" label="Visibility" value="On" hasChevron colors={colors} />
-          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
-          <SettingsRow icon="location.circle.fill" iconColor="#007AFF" label="Discovery Radius" value="25 mi" hasChevron colors={colors} />
+          <SettingsRow
+            icon="eye.fill"
+            iconColor="#34C759"
+            label="Visibility"
+            value={VISIBILITY_LABELS[profile?.visibility ?? "on"]}
+            onPress={cycleVisibility}
+            colors={colors}
+          />
         </View>
       </View>
 
-      {/* Preferences */}
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Preferences</Text>
-        <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
-          <SettingsRow icon="speedometer" iconColor="#FF9500" label="Speed Unit" value="mph" hasChevron colors={colors} />
-          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
-          <SettingsRow icon="moon.fill" iconColor="#AF52DE" label="Map Style" value="Auto" hasChevron colors={colors} />
-          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
-          <SettingsRow icon="bell.fill" iconColor="#FF3B30" label="Notifications" value="On" hasChevron colors={colors} />
-        </View>
-      </View>
-
-      {/* Account */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account</Text>
         <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
-          <SettingsRow icon="person.text.rectangle.fill" iconColor="#8E8E93" label="Username" value="@username" colors={colors} />
+          <SettingsRow
+            icon="person.text.rectangle.fill"
+            iconColor="#8E8E93"
+            label="Username"
+            value={`@${profile?.username ?? ""}`}
+            colors={colors}
+          />
           <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
-          <SettingsRow icon="envelope.fill" iconColor="#8E8E93" label="Email" value="user@email.com" colors={colors} />
-          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
-          <SettingsRow icon="key.fill" iconColor="#8E8E93" label="Change Password" hasChevron colors={colors} />
+          <SettingsRow
+            icon="envelope.fill"
+            iconColor="#8E8E93"
+            label="Email"
+            value={profile?.email ?? "Not set"}
+            colors={colors}
+          />
         </View>
       </View>
 
-      {/* About */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
         <View style={[styles.card, { backgroundColor: colors.cardBackground }]}>
-          <SettingsRow icon="info.circle.fill" iconColor="#8E8E93" label="Version" value="1.0.0" colors={colors} />
-          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
-          <SettingsRow icon="doc.text.fill" iconColor="#8E8E93" label="Terms of Service" hasChevron colors={colors} />
-          <View style={[styles.separator, { backgroundColor: colors.separatorLight }]} />
-          <SettingsRow icon="hand.raised.fill" iconColor="#8E8E93" label="Privacy Policy" hasChevron colors={colors} />
+          <SettingsRow
+            icon="info.circle.fill"
+            iconColor="#8E8E93"
+            label="Version"
+            value="1.0.0"
+            colors={colors}
+          />
         </View>
       </View>
 
-      {/* Danger Zone */}
-      <Pressable style={styles.deleteButton}>
+      <Pressable style={styles.deleteButton} onPress={handleDeleteAccount}>
         <Text style={styles.deleteText}>Delete Account</Text>
       </Pressable>
     </ScrollView>
@@ -72,24 +120,24 @@ function SettingsRow({
   iconColor,
   label,
   value,
-  hasChevron,
+  onPress,
   colors,
 }: {
   icon: string;
   iconColor: string;
   label: string;
   value?: string;
-  hasChevron?: boolean;
+  onPress?: () => void;
   colors: ReturnType<typeof useSheetColors>;
 }) {
   return (
-    <Pressable style={styles.row}>
+    <Pressable style={styles.row} onPress={onPress} disabled={!onPress}>
       <View style={[styles.rowIcon, { backgroundColor: `${iconColor}18` }]}>
         <SymbolView name={icon as any} tintColor={iconColor} size={16} />
       </View>
       <Text style={[styles.rowLabel, { color: colors.textPrimary }]}>{label}</Text>
       {value && <Text style={[styles.rowValue, { color: colors.textSecondary }]}>{value}</Text>}
-      {hasChevron && (
+      {onPress && (
         <SymbolView name="chevron.right" tintColor={colors.chevron} size={12} />
       )}
     </Pressable>
@@ -104,6 +152,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 80,
   },
   pageTitle: {
     fontSize: 22,

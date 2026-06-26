@@ -1,0 +1,442 @@
+[meta]
+api: SlipStream
+version: 0.1.0
+desc: Real-time social driving network for car enthusiasts.
+auth: bearer header:Authorization
+
+[types]
+ConvoyMemberRole: leader | member
+ConvoyStatus: forming | active | ended
+ConvoyVisibility: public | private
+MessageType: text | system | quick_action
+SpeedUnit: mph | kph
+VisibilityMode: on | friends_only | ghost
+
+AppleAuthRequest:
+  identity_token: str
+  full_name?: any
+  email?: any
+
+AppleAuthResponse:
+  access_token: str
+  refresh_token: str
+  token_type?: str = "bearer"
+  user_id: str
+  username: str
+  is_new_user: bool
+
+CarResponse:
+  id: str
+  year: int
+  make: str
+  model: str
+  trim?: any
+  color: str
+  display_name?: any
+  photo_url?: any
+  mods?: any
+  is_active: bool
+  created_at: str
+
+CarSummary:
+  id: str
+  year: int
+  make: str
+  model: str
+  trim?: any
+  color: str
+  is_active: bool
+
+ConvoyMemberOut:
+  user_id: str
+  username: str
+  display_name?: any
+  avatar_url?: any
+  role: ConvoyMemberRole
+  car_year?: any
+  car_make?: any
+  car_model?: any
+  car_color?: any
+  joined_at: str
+
+ConvoyMessageOut:
+  id: str
+  sender_id?: any
+  sender_username?: any
+  content: str
+  message_type: MessageType
+  created_at: str
+
+ConvoyResponse:
+  id: str
+  name: str
+  leader_id: str
+  visibility: ConvoyVisibility
+  status: ConvoyStatus
+  destination_name?: any
+  member_count: int
+  members?: any
+  created_at: str
+
+CreateCarRequest:
+  year: int
+  make: str
+  model: str
+  trim?: any
+  color: str
+  display_name?: any
+  photo_url?: any
+  mods?: any
+
+CreateConvoyRequest:
+  name?: str = "Open Cruise"
+  visibility?: ConvoyVisibility
+  destination_name?: any
+  destination_lat?: any
+  destination_lng?: any
+
+FriendCarSummary:
+  id: str
+  year: int
+  make: str
+  model: str
+  trim?: any
+  color: str
+
+FriendProfile:
+  id: str
+  username: str
+  display_name?: any
+  avatar_url?: any
+  active_car?: any
+
+FriendRequestAction:
+  request_id: str
+
+FriendRequestCreate:
+  user_id: str
+
+FriendRequestOut:
+  request_id: str
+  from_user: FriendProfile
+  created_at: str
+
+FullName:
+  given_name?: any
+  family_name?: any
+
+HTTPValidationError:
+  detail?: [ValidationError]
+
+InviteRequest:
+  user_id: str
+
+KickRequest:
+  user_id: str
+
+LoginRequest:
+  username: str
+  password: str
+
+MessageResponse:
+  message: str
+
+PublicUserProfile:
+  id: str
+  username: str
+  display_name?: any
+  avatar_url?: any
+  active_car?: any
+
+QuickActionRequest:
+  action: str
+
+RefreshRequest:
+  refresh_token: str
+
+RegisterRequest:
+  username: str
+  password: str
+  email?: any
+  display_name?: any
+
+RouteResponse:
+  id: str
+  destination_name: str
+  destination_lat: float
+  destination_lng: float
+  set_by_username: str
+  waypoints?: any
+  is_active: bool
+  created_at: str
+
+SendMessageRequest:
+  content: str
+
+SetRouteRequest:
+  destination_name: str
+  destination_lat: float
+  destination_lng: float
+  waypoints?: any
+
+TokenResponse:
+  access_token: str
+  refresh_token: str
+  token_type?: str = "bearer"
+  user_id: str
+  username: str
+
+UpdateCarRequest:
+  year?: any
+  make?: any
+  model?: any
+  trim?: any
+  color?: any
+  display_name?: any
+  photo_url?: any
+  mods?: any
+
+UpdateConvoyRequest:
+  name?: any
+  visibility?: any
+
+UpdateProfileRequest:
+  username?: any
+  display_name?: any
+  email?: any
+  avatar_url?: any
+  visibility?: any
+  discovery_radius_miles?: any
+  speed_unit?: any
+
+UserProfile:
+  id: str
+  username: str
+  display_name?: any
+  email?: any
+  avatar_url?: any
+  visibility: VisibilityMode
+  discovery_radius_miles: int
+  speed_unit: SpeedUnit
+  active_car?: any
+
+UserSearchResult:
+  id: str
+  username: str
+  display_name?: any
+  avatar_url?: any
+  active_car?: any
+
+ValidationError:
+  loc: [any]
+  msg: str
+  type: str
+  input?: any
+  ctx?: any
+
+Waypoint:
+  lat: float
+  lng: float
+  name?: any
+  order?: any
+
+[ops]
+register POST /auth/register
+  Register
+  > register_request: RegisterRequest
+  < TokenResponse
+
+auth_with_apple POST /auth/apple
+  Auth With Apple
+  > apple_auth_request: AppleAuthRequest
+  < AppleAuthResponse
+
+login POST /auth/login
+  Login
+  > login_request: LoginRequest
+  < TokenResponse
+
+refresh POST /auth/refresh
+  Refresh
+  > refresh_request: RefreshRequest
+  < TokenResponse
+
+logout POST /auth/logout
+  Logout
+  > refresh_request: RefreshRequest
+  < MessageResponse
+
+get_my_profile GET /users/me
+  Get My Profile
+  < UserProfile
+
+update_my_profile PATCH /users/me
+  Update My Profile
+  > update_profile_request: UpdateProfileRequest
+  < UserProfile
+
+delete_account DELETE /users/me
+  Delete Account
+  < MessageResponse
+
+search_users GET /users/search
+  Search Users
+  > q: str
+  < [UserSearchResult]
+
+get_user_profile GET /users/{user_id}
+  Get User Profile
+  > user_id: str
+  < PublicUserProfile
+
+list_cars GET /cars
+  List Cars
+  < [CarResponse]
+
+create_car POST /cars
+  Create Car
+  > create_car_request: CreateCarRequest
+  < CarResponse
+
+update_car PATCH /cars/{car_id}
+  Update Car
+  > car_id: str
+  > update_car_request: UpdateCarRequest
+  < CarResponse
+
+delete_car DELETE /cars/{car_id}
+  Delete Car
+  > car_id: str
+  < MessageResponse
+
+activate_car POST /cars/{car_id}/activate
+  Activate Car
+  > car_id: str
+  < CarResponse
+
+list_friends GET /friends
+  List Friends
+  < [FriendProfile]
+
+list_friend_requests GET /friends/requests
+  List Friend Requests
+  < [FriendRequestOut]
+
+send_friend_request POST /friends/request
+  Send Friend Request
+  > friend_request_create: FriendRequestCreate
+  < MessageResponse
+
+accept_friend_request POST /friends/accept
+  Accept Friend Request
+  > friend_request_action: FriendRequestAction
+  < MessageResponse
+
+decline_friend_request POST /friends/decline
+  Decline Friend Request
+  > friend_request_action: FriendRequestAction
+  < MessageResponse
+
+remove_friend DELETE /friends/{user_id}
+  Remove Friend
+  > user_id: str
+  < MessageResponse
+
+create_convoy POST /convoys
+  Create Convoy
+  > create_convoy_request: CreateConvoyRequest
+  < ConvoyResponse
+
+get_convoy GET /convoys/{convoy_id}
+  Get Convoy
+  > convoy_id: str
+  < ConvoyResponse
+
+update_convoy PATCH /convoys/{convoy_id}
+  Update Convoy
+  > convoy_id: str
+  > update_convoy_request: UpdateConvoyRequest
+  < ConvoyResponse
+
+end_convoy POST /convoys/{convoy_id}/end
+  End Convoy
+  > convoy_id: str
+  < MessageResponse
+
+join_convoy POST /convoys/{convoy_id}/join
+  Join Convoy
+  > convoy_id: str
+  < ConvoyResponse
+
+request_to_join POST /convoys/{convoy_id}/request
+  Request To Join
+  > convoy_id: str
+  < MessageResponse
+
+accept_join_request POST /convoys/{convoy_id}/request/{request_id}/accept
+  Accept Join Request
+  > convoy_id: str
+  > request_id: str
+  < MessageResponse
+
+decline_join_request POST /convoys/{convoy_id}/request/{request_id}/decline
+  Decline Join Request
+  > convoy_id: str
+  > request_id: str
+  < MessageResponse
+
+leave_convoy POST /convoys/{convoy_id}/leave
+  Leave Convoy
+  > convoy_id: str
+  < MessageResponse
+
+invite_to_convoy POST /convoys/{convoy_id}/invite
+  Invite To Convoy
+  > convoy_id: str
+  > invite_request: InviteRequest
+  < MessageResponse
+
+kick_member POST /convoys/{convoy_id}/kick
+  Kick Member
+  > convoy_id: str
+  > kick_request: KickRequest
+  < MessageResponse
+
+get_messages GET /convoys/{convoy_id}/messages
+  Get Messages
+  > convoy_id: str
+  > limit?: int = 50
+  > before?: any
+  < [ConvoyMessageOut]
+
+send_message POST /convoys/{convoy_id}/messages
+  Send Message
+  > convoy_id: str
+  > send_message_request: SendMessageRequest
+  < ConvoyMessageOut
+
+send_quick_action POST /convoys/{convoy_id}/quick-action
+  Send Quick Action
+  > convoy_id: str
+  > quick_action_request: QuickActionRequest
+  < ConvoyMessageOut
+
+get_active_route GET /convoys/{convoy_id}/route
+  Get Active Route
+  > convoy_id: str
+
+set_route POST /convoys/{convoy_id}/route
+  Set Route
+  > convoy_id: str
+  > set_route_request: SetRouteRequest
+  < RouteResponse
+
+get_spatial_config GET /spatial/config
+  Get Spatial Config
+
+health_check GET /health
+  Health Check
+
+[errors]
+422 validation_error
+  Validation Error
