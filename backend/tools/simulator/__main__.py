@@ -25,48 +25,86 @@ import argparse
 import asyncio
 import logging
 import signal
-import sys
 import time
-import uuid
 from urllib.parse import urlparse
 
 import httpx
 
-# Ensure the backend package is importable (for JWT minting)
-sys.path.insert(0, "src")
-
-from slipstream.auth import create_access_token  # noqa: E402
-
-from tools.simulator.config import (  # noqa: E402
+from tools.simulator.config import (
     DEFAULT_NUM_DRIVERS,
+    SIM_CARS,
+    SIM_PASSWORD,
     STAGGER_DELAY_SECONDS,
     UPDATE_INTERVAL_SECONDS,
     WS_URL,
 )
-from tools.simulator.driver import SimulatedDriver  # noqa: E402
-from tools.simulator.routes import pick_route  # noqa: E402
+from tools.simulator.driver import SimulatedDriver
+from tools.simulator.routes import pick_route
 
 logger = logging.getLogger(__name__)
 
 
-def mint_token(driver_index: int) -> tuple[uuid.UUID, str, str]:
-    """Mint a JWT for a fake driver without touching the database.
+async def ensure_user(
+    client: httpx.AsyncClient,
+    base_url: str,
+    driver_index: int,
+) -> tuple[str, str]:
+    """Register or login a simulated user, returning (user_id, access_token).
 
-    The spatial WebSocket only verifies the JWT signature and extracts
-    user_id + username. It does NOT check the database. So we can create
-    arbitrary users by just signing a valid token.
-
-    Returns (user_id, username, token).
+    Tries to register first. If the username is already taken (409), falls back
+    to login. This makes the simulator idempotent — rerunning it reuses existing
+    users in the database.
     """
     username = f"sim_{driver_index:04d}"
-    user_id = uuid.uuid5(uuid.NAMESPACE_DNS, username)
-    token = create_access_token(user_id, username)
-    return user_id, username, token
+    display_name = f"Sim Driver {driver_index}"
+    car_template = SIM_CARS[driver_index % len(SIM_CARS)]
+
+    # Try register
+    register_resp = await client.post(
+        f"{base_url}/auth/register",
+        json={
+            "username": username,
+            "password": SIM_PASSWORD,
+            "display_name": display_name,
+        },
+    )
+
+    if register_resp.status_code == 201:
+        data = register_resp.json()
+        token = data["access_token"]
+        user_id = data["user_id"]
+        logger.debug(f"[{username}] Registered new user: {user_id}")
+
+        # Add a car for the new user
+        await client.post(
+            f"{base_url}/cars",
+            json={**car_template, "is_active": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        return user_id, token
+
+    if register_resp.status_code == 409:
+        # User already exists — login
+        login_resp = await client.post(
+            f"{base_url}/auth/login",
+            json={"username": username, "password": SIM_PASSWORD},
+        )
+        if login_resp.status_code == 200:
+            data = login_resp.json()
+            logger.debug(f"[{username}] Logged in existing user: {data['user_id']}")
+            return data["user_id"], data["access_token"]
+        else:
+            raise RuntimeError(
+                f"[{username}] Login failed ({login_resp.status_code}): {login_resp.text}"
+            )
+
+    raise RuntimeError(
+        f"[{username}] Register failed ({register_resp.status_code}): {register_resp.text}"
+    )
 
 
 async def check_server(ws_url: str) -> bool:
     """Verify the server is reachable before spawning drivers."""
-    # Derive HTTP URL from WebSocket URL
     parsed = urlparse(ws_url)
     scheme = "https" if parsed.scheme == "wss" else "http"
     health_url = f"{scheme}://{parsed.netloc}/health"
@@ -89,7 +127,7 @@ async def check_server(ws_url: str) -> bool:
                 return False
     except httpx.ConnectError:
         print(f"✗ Cannot connect to server at {health_url}")
-        print(f"  Make sure the server is running: docker compose up")
+        print("  Make sure the server is running: docker compose up")
         return False
     except Exception as e:
         print(f"✗ Health check failed: {e}")
@@ -102,36 +140,52 @@ async def run_simulation(
     update_interval: float,
 ) -> None:
     """Spawn drivers and run until interrupted."""
-    print(f"\n{'═' * 60}")
-    print(f"  SlipStream Simulator")
+    parsed = urlparse(ws_url)
+    scheme = "https" if parsed.scheme == "wss" else "http"
+    base_url = f"{scheme}://{parsed.netloc}"
+
+    print(f"\n{'=' * 60}")
+    print("  SlipStream Simulator")
     print(f"  Drivers: {num_drivers}")
     print(f"  Server:  {ws_url}")
     print(f"  Rate:    1 update every {update_interval}s per driver")
-    print(f"{'═' * 60}\n")
+    print(f"{'=' * 60}\n")
 
     # Verify server is reachable
     if not await check_server(ws_url):
         print("\nAborting. Start the server first.")
         return
 
-    # Create all drivers
+    # Register/login all simulated users
+    print(f"\n⏳ Provisioning {num_drivers} simulated users...")
     drivers: list[SimulatedDriver] = []
-    for i in range(num_drivers):
-        _, username, token = mint_token(i)
-        route = pick_route(i)
-        driver = SimulatedDriver(
-            driver_index=i,
-            route=route,
-            token=token,
-            ws_url=ws_url,
-            update_interval=update_interval,
-        )
-        drivers.append(driver)
 
-    print(f"✓ Created {num_drivers} drivers with routes")
-    print(f"  • Predefined routes: {min(num_drivers, 18)} drivers")
-    print(f"  • Circular loops: {max(0, min(num_drivers - 18, 20))} drivers")
-    print(f"  • Random walks: {max(0, num_drivers - 38)} drivers")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for i in range(num_drivers):
+            try:
+                _, token = await ensure_user(client, base_url, i)
+            except RuntimeError as e:
+                logger.error(str(e))
+                continue
+
+            route = pick_route(i)
+            driver = SimulatedDriver(
+                driver_index=i,
+                route=route,
+                token=token,
+                ws_url=ws_url,
+                update_interval=update_interval,
+            )
+            drivers.append(driver)
+
+    if not drivers:
+        print("✗ No drivers could be provisioned. Check server logs.")
+        return
+
+    print(f"✓ Provisioned {len(drivers)} drivers with routes")
+    print(f"  • Predefined routes: {min(len(drivers), 18)} drivers")
+    print(f"  • Circular loops: {max(0, min(len(drivers) - 18, 20))} drivers")
+    print(f"  • Random walks: {max(0, len(drivers) - 38)} drivers")
     print(
         f"\n⏳ Connecting drivers (stagger: {STAGGER_DELAY_SECONDS * 1000:.0f}ms)...\n"
     )
@@ -156,7 +210,7 @@ async def run_simulation(
         tasks.append(task)
         await asyncio.sleep(STAGGER_DELAY_SECONDS)
 
-    print(f"✓ All {num_drivers} drivers launched\n")
+    print(f"✓ All {len(drivers)} drivers launched\n")
 
     # Stats reporting loop
     start_time = time.time()
@@ -168,7 +222,7 @@ async def run_simulation(
             rate = total_updates / elapsed if elapsed > 0 else 0
             connected = sum(1 for d in drivers if d._running)
             print(
-                f"  📊 {connected} drivers | "
+                f"  \U0001f4ca {connected} drivers | "
                 f"{total_updates:,} updates sent | "
                 f"{rate:.0f} updates/sec | "
                 f"{elapsed:.0f}s elapsed"
@@ -183,12 +237,12 @@ async def run_simulation(
 
     total_updates = sum(d.updates_sent for d in drivers)
     elapsed = time.time() - start_time
-    print(f"\n{'═' * 60}")
-    print(f"  Simulation complete")
+    print(f"\n{'=' * 60}")
+    print("  Simulation complete")
     print(f"  Duration: {elapsed:.1f}s")
     print(f"  Total updates: {total_updates:,}")
     print(f"  Average rate: {total_updates / elapsed:.0f} updates/sec")
-    print(f"{'═' * 60}\n")
+    print(f"{'=' * 60}\n")
 
 
 def main() -> None:
@@ -239,6 +293,7 @@ Examples:
     # Suppress noisy library logs unless verbose
     if not args.verbose:
         logging.getLogger("websockets").setLevel(logging.WARNING)
+        logging.getLogger("httpx").setLevel(logging.WARNING)
 
     asyncio.run(run_simulation(args.drivers, args.url, args.interval))
 

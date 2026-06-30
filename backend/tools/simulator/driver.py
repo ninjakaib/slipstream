@@ -1,8 +1,8 @@
 """Simulated driver — a single WebSocket client that drives a route.
 
 Each SimulatedDriver:
-1. Receives a pre-minted JWT (no database entry needed)
-2. Connects to /ws/live
+1. Authenticates via the REST API (register or login)
+2. Connects to /ws/live with the real JWT
 3. Sends location_update messages at a fixed interval
 4. Loops its route indefinitely until cancelled
 5. Sends heartbeats to keep the connection alive
@@ -12,7 +12,6 @@ import asyncio
 import json
 import logging
 import random
-import uuid
 
 import websockets
 
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class SimulatedDriver:
-    """A fake driver that connects via WebSocket and drives a route in a loop."""
+    """A real-user driver that connects via WebSocket and drives a route in a loop."""
 
     def __init__(
         self,
@@ -41,8 +40,6 @@ class SimulatedDriver:
         self.token = token
         self.ws_url = ws_url
         self.update_interval = update_interval
-        # Deterministic UUID from index — must match mint_token() in __main__.py
-        self.user_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"sim_{driver_index:04d}")
         self.username = f"sim_{driver_index:04d}"
 
         # Randomize base speed for this driver
