@@ -5,5 +5,10 @@
     "swiftui-pro@swiftui-agent-skill": false,
     "swift-lsp@claude-plugins-official": false,
     "expo@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "mcp__argent"
+    ]
   }
 }

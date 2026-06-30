@@ -3,12 +3,10 @@ import { StyleSheet, View } from "react-native";
 
 import { useAuth } from "@/contexts/auth-context";
 import { DebugPanel } from "@/components/debug-panel";
-import { DriverSheet } from "@/features/map/driver-sheet";
 import { LiveMap } from "@/features/map/live-map";
 import { useLocation } from "@/hooks/use-location";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useDriversStore } from "@/stores/drivers-store";
-import { useSelectedDriverStore } from "@/stores/selected-driver-store";
 import { MapSheet } from "@/components/map-sheet/map-sheet";
 
 const SERVER_URL = process.env.EXPO_PUBLIC_WS_URL ?? null;
@@ -46,7 +44,6 @@ export default function MapScreen() {
 
   const [currentResolution, setCurrentResolution] = useState(0);
   const [cellCount, setCellCount] = useState(0);
-  const selectedDriverId = useSelectedDriverStore((s) => s.selectedDriverId);
 
   const handleCellsChanged = useCallback(
     (cells: string[], resolution: number) => {
@@ -75,8 +72,6 @@ export default function MapScreen() {
           ]}
         />
       </View>
-
-      {selectedDriverId && <DriverSheet />}
 
       <MapSheet />
 

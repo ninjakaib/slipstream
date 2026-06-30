@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   Pressable,
@@ -17,11 +17,13 @@ import type { DetentChangeEvent } from "@lodev09/react-native-true-sheet";
 import { SymbolView } from "expo-symbols";
 
 import { useSheetColors, type SheetColors } from "@/hooks/use-sheet-colors";
+import { useSelectedDriverStore } from "@/stores/selected-driver-store";
 import { DiscoverPage } from "@/components/map-sheet/pages/discover-page";
 import { SocialPage } from "@/components/map-sheet/pages/social-page";
 import { ConvoyPage } from "@/components/map-sheet/pages/convoy-page";
 import { ProfilePage } from "@/components/map-sheet/pages/profile-page";
 import { SettingsPage } from "@/components/map-sheet/pages/settings-page";
+import { UserDetailView } from "@/components/map-sheet/pages/user-detail-view";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const PAGE_COUNT = 5;
@@ -59,6 +61,13 @@ export function MapSheet() {
   const currentPage = useSharedValue(0);
   const colors = useSheetColors();
   const [isExpanded, setIsExpanded] = useState(false);
+  const { selectedDriverId, clearSelection } = useSelectedDriverStore();
+
+  useEffect(() => {
+    if (selectedDriverId) {
+      sheetRef.current?.resize(1);
+    }
+  }, [selectedDriverId]);
 
   const handleTabPress = (index: number) => {
     currentPage.value = withSpring(index, SPRING_CONFIG);
@@ -71,6 +80,10 @@ export function MapSheet() {
     setIsExpanded(event.nativeEvent.index > 0);
   };
 
+  const handleDriverBack = () => {
+    clearSelection();
+  };
+
   return (
     <TrueSheet
       ref={sheetRef}
@@ -81,24 +94,30 @@ export function MapSheet() {
       dismissible={false}
       onDetentChange={handleDetentChange}
       header={
-        <View style={styles.tabBarContainer}>
-          <View style={styles.tabRow}>
-            {TABS.map((tab, index) => (
-              <TabItem
-                key={tab.key}
-                tab={tab}
-                index={index}
-                currentPage={currentPage}
-                colors={colors}
-                onPress={handleTabPress}
-              />
-            ))}
+        !selectedDriverId ? (
+          <View style={styles.tabBarContainer}>
+            <View style={styles.tabRow}>
+              {TABS.map((tab, index) => (
+                <TabItem
+                  key={tab.key}
+                  tab={tab}
+                  index={index}
+                  currentPage={currentPage}
+                  colors={colors}
+                  onPress={handleTabPress}
+                />
+              ))}
+            </View>
           </View>
-        </View>
+        ) : undefined
       }
     >
       <GestureHandlerRootView style={styles.container}>
-        <Pages currentPage={currentPage} />
+        {selectedDriverId ? (
+          <UserDetailView userId={selectedDriverId} onBack={handleDriverBack} />
+        ) : (
+          <Pages currentPage={currentPage} />
+        )}
       </GestureHandlerRootView>
     </TrueSheet>
   );
