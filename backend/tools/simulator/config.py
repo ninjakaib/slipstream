@@ -5,7 +5,7 @@ BASE_URL = "http://localhost:8000"
 WS_URL = "ws://localhost:8000/ws/live"
 
 # Timing
-UPDATE_INTERVAL_SECONDS = 5.0
+UPDATE_INTERVAL_SECONDS = 10
 STAGGER_DELAY_SECONDS = 0.05  # Delay between spawning each driver
 
 # Driving parameters

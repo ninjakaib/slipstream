@@ -20,6 +20,7 @@ import {
 import { useUserSearch } from "@/hooks/queries/use-user-search";
 import { useDriversStore } from "@/stores/drivers-store";
 import { formatCarName } from "@/lib/format";
+import { UserDetailView } from "./user-detail-view";
 import type { FriendProfile, FriendRequestOut, UserSearchResult } from "@/lib/api/types.gen";
 
 export function SocialPage() {
@@ -31,10 +32,15 @@ export function SocialPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showRequests, setShowRequests] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   const onlineFriends = friends?.filter((f) => driverIds.has(f.id)) ?? [];
   const offlineFriends = friends?.filter((f) => !driverIds.has(f.id)) ?? [];
   const requestCount = requests?.length ?? 0;
+
+  if (selectedUserId) {
+    return <UserDetailView userId={selectedUserId} onBack={() => setSelectedUserId(null)} />;
+  }
 
   if (friendsLoading) {
     return (
@@ -107,7 +113,13 @@ export function SocialPage() {
           </Text>
           <View style={styles.friendsList}>
             {onlineFriends.map((friend) => (
-              <FriendRow key={friend.id} friend={friend} status="driving" colors={colors} />
+              <FriendRow
+                key={friend.id}
+                friend={friend}
+                status="driving"
+                colors={colors}
+                onPress={() => setSelectedUserId(friend.id)}
+              />
             ))}
           </View>
         </View>
@@ -126,7 +138,13 @@ export function SocialPage() {
         ) : (
           <View style={styles.friendsList}>
             {offlineFriends.map((friend) => (
-              <FriendRow key={friend.id} friend={friend} status="offline" colors={colors} />
+              <FriendRow
+                key={friend.id}
+                friend={friend}
+                status="offline"
+                colors={colors}
+                onPress={() => setSelectedUserId(friend.id)}
+              />
             ))}
           </View>
         )}
@@ -288,16 +306,18 @@ function FriendRow({
   friend,
   status,
   colors,
+  onPress,
 }: {
   friend: FriendProfile;
   status: "driving" | "offline";
   colors: ReturnType<typeof useSheetColors>;
+  onPress: () => void;
 }) {
   const statusColor = status === "driving" ? "#34C759" : "#48484A";
   const carText = friend.active_car ? formatCarName(friend.active_car) : undefined;
 
   return (
-    <Pressable style={styles.friendRow}>
+    <Pressable style={styles.friendRow} onPress={onPress}>
       <View style={[styles.avatar, { backgroundColor: colors.avatarBackground }]}>
         <SymbolView name="person.fill" tintColor={colors.textTertiary} size={18} />
         <View style={[styles.friendStatusDot, { backgroundColor: statusColor, borderColor: colors.borderSubtle }]} />
@@ -313,6 +333,7 @@ function FriendRow({
       {status === "driving" && (
         <SymbolView name="location.fill" tintColor={statusColor} size={14} />
       )}
+      <SymbolView name="chevron.right" tintColor={colors.chevron} size={12} />
     </Pressable>
   );
 }

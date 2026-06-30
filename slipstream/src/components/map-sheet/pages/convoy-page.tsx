@@ -1,6 +1,10 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,10 +15,17 @@ import {
 import { SymbolView } from "expo-symbols";
 import { useSheetColors } from "@/hooks/use-sheet-colors";
 import { useAuth } from "@/contexts/auth-context";
-import { useConvoyState } from "@/hooks/queries/use-convoy";
+import {
+  useConvoyState,
+  useConvoyMessages,
+  useSendConvoyMessage,
+  useConvoyRoute,
+} from "@/hooks/queries/use-convoy";
 import { useFriends } from "@/hooks/queries/use-friends";
 import { formatCarName } from "@/lib/format";
-import type { ConvoyMemberOut, FriendProfile } from "@/lib/api/types.gen";
+import type { ConvoyMemberOut, ConvoyMessageOut, FriendProfile } from "@/lib/api/types.gen";
+
+type ConvoyTab = "members" | "chat" | "route";
 
 export function ConvoyPage() {
   const colors = useSheetColors();
@@ -22,10 +33,12 @@ export function ConvoyPage() {
     convoy,
     isLoading,
     isLeader,
+    convoyId,
     create,
     leave,
     end,
     invite,
+    kick,
     setGroupRoute,
   } = useConvoyState();
 
@@ -42,13 +55,30 @@ export function ConvoyPage() {
   }
 
   return (
-    <ConvoyLobby
+    <ConvoyActive
       convoy={convoy}
+      convoyId={convoyId!}
       isLeader={isLeader}
       colors={colors}
-      onLeave={() => leave.mutate()}
-      onEnd={() => end.mutate()}
+      onLeave={() => {
+        Alert.alert("Leave Convoy", "Are you sure you want to leave?", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Leave", style: "destructive", onPress: () => leave.mutate() },
+        ]);
+      }}
+      onEnd={() => {
+        Alert.alert("End Convoy", "This will end the convoy for all members.", [
+          { text: "Cancel", style: "cancel" },
+          { text: "End", style: "destructive", onPress: () => end.mutate() },
+        ]);
+      }}
       onInvite={(userId) => invite.mutate(userId)}
+      onKick={(userId, name) => {
+        Alert.alert("Kick Member", `Remove ${name} from the convoy?`, [
+          { text: "Cancel", style: "cancel" },
+          { text: "Kick", style: "destructive", onPress: () => kick.mutate(userId) },
+        ]);
+      }}
       onSetRoute={(name, lat, lng) =>
         setGroupRoute.mutate({ destination_name: name, destination_lat: lat, destination_lng: lng })
       }
@@ -89,112 +119,197 @@ function ConvoyEmpty({
   );
 }
 
-function ConvoyLobby({
+function ConvoyActive({
   convoy,
+  convoyId,
   isLeader,
   colors,
   onLeave,
   onEnd,
   onInvite,
+  onKick,
   onSetRoute,
 }: {
   convoy: NonNullable<ReturnType<typeof useConvoyState>["convoy"]>;
+  convoyId: string;
   isLeader: boolean;
   colors: ReturnType<typeof useSheetColors>;
   onLeave: () => void;
   onEnd: () => void;
   onInvite: (userId: string) => void;
+  onKick: (userId: string, name: string) => void;
   onSetRoute: (name: string, lat: number, lng: number) => void;
 }) {
-  const { session } = useAuth();
-  const [showInvite, setShowInvite] = useState(false);
-  const [showRoute, setShowRoute] = useState(false);
+  const [activeTab, setActiveTab] = useState<ConvoyTab>("members");
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.lobbyHeader}>
-        <View style={styles.lobbyTitleRow}>
-          <Text style={[styles.lobbyTitle, { color: colors.textPrimary }]}>{convoy.name}</Text>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>{convoy.status.toUpperCase()}</Text>
+    <View style={styles.container}>
+      <ConvoyHeader convoy={convoy} colors={colors} />
+
+      <View style={styles.tabBar}>
+        <TabButton label="Members" icon="person.2.fill" active={activeTab === "members"} onPress={() => setActiveTab("members")} colors={colors} />
+        <TabButton label="Chat" icon="bubble.left.fill" active={activeTab === "chat"} onPress={() => setActiveTab("chat")} colors={colors} />
+        <TabButton label="Route" icon="map.fill" active={activeTab === "route"} onPress={() => setActiveTab("route")} colors={colors} />
+      </View>
+
+      <View style={styles.tabContent}>
+        {activeTab === "members" && (
+          <MembersTab
+            convoy={convoy}
+            isLeader={isLeader}
+            colors={colors}
+            onInvite={onInvite}
+            onKick={onKick}
+          />
+        )}
+        {activeTab === "chat" && (
+          <ChatTab convoyId={convoyId} colors={colors} />
+        )}
+        {activeTab === "route" && (
+          <RouteTab convoyId={convoyId} colors={colors} onSetRoute={onSetRoute} />
+        )}
+      </View>
+
+      <View style={styles.footer}>
+        <Pressable
+          style={[styles.footerButton, isLeader ? styles.endButtonStyle : styles.leaveButtonStyle]}
+          onPress={isLeader ? onEnd : onLeave}
+        >
+          <SymbolView
+            name={isLeader ? "xmark.circle.fill" : "arrow.left.circle.fill"}
+            tintColor={isLeader ? "#FF3B30" : "#8E8E93"}
+            size={16}
+          />
+          <Text style={[styles.footerButtonText, isLeader && styles.endButtonText]}>
+            {isLeader ? "End Convoy" : "Leave Convoy"}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function ConvoyHeader({
+  convoy,
+  colors,
+}: {
+  convoy: NonNullable<ReturnType<typeof useConvoyState>["convoy"]>;
+  colors: ReturnType<typeof useSheetColors>;
+}) {
+  return (
+    <View style={styles.headerContainer}>
+      <View style={styles.headerTop}>
+        <View style={styles.headerTitle}>
+          <Text style={[styles.convoyName, { color: colors.textPrimary }]}>{convoy.name}</Text>
+          <View style={[styles.statusBadge, convoy.status === "active" && styles.statusBadgeActive]}>
+            <Text style={[styles.statusBadgeText, convoy.status === "active" && styles.statusBadgeTextActive]}>
+              {convoy.status.toUpperCase()}
+            </Text>
           </View>
         </View>
-        <Text style={[styles.lobbySubtitle, { color: colors.textSecondary }]}>
+        <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
           {convoy.member_count} {convoy.member_count === 1 ? "member" : "members"}
           {convoy.destination_name ? ` · → ${convoy.destination_name}` : ""}
         </Text>
       </View>
+    </View>
+  );
+}
 
-      <View style={styles.actionButtons}>
-        <Pressable
-          style={[styles.actionButton, { backgroundColor: colors.cardBackgroundElevated }]}
-          onPress={() => setShowInvite(!showInvite)}
-        >
-          <SymbolView name="person.badge.plus" tintColor="#007AFF" size={18} />
-          <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>Invite</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.actionButton, { backgroundColor: colors.cardBackgroundElevated }]}
-          onPress={() => setShowRoute(!showRoute)}
-        >
-          <SymbolView name="map.fill" tintColor="#FF9500" size={18} />
-          <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>Set Route</Text>
-        </Pressable>
-      </View>
+function TabButton({
+  label,
+  icon,
+  active,
+  onPress,
+  colors,
+}: {
+  label: string;
+  icon: string;
+  active: boolean;
+  onPress: () => void;
+  colors: ReturnType<typeof useSheetColors>;
+}) {
+  return (
+    <Pressable
+      style={[styles.tabButton, active && styles.tabButtonActive]}
+      onPress={onPress}
+    >
+      <SymbolView name={icon as any} tintColor={active ? "#007AFF" : colors.textTertiary} size={16} />
+      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{label}</Text>
+    </Pressable>
+  );
+}
 
-      {showInvite && <InviteSection onInvite={onInvite} colors={colors} />}
-      {showRoute && <RouteSection onSetRoute={onSetRoute} colors={colors} />}
+function MembersTab({
+  convoy,
+  isLeader,
+  colors,
+  onInvite,
+  onKick,
+}: {
+  convoy: NonNullable<ReturnType<typeof useConvoyState>["convoy"]>;
+  isLeader: boolean;
+  colors: ReturnType<typeof useSheetColors>;
+  onInvite: (userId: string) => void;
+  onKick: (userId: string, name: string) => void;
+}) {
+  const { session } = useAuth();
+  const [showInvite, setShowInvite] = useState(false);
 
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Members</Text>
-        <View style={[styles.memberList, { backgroundColor: colors.cardBackground }]}>
-          {convoy.members?.map((member) => (
-            <MemberRow
-              key={member.user_id}
-              member={member}
-              isCurrentUser={member.user_id === session?.userId}
-              colors={colors}
-            />
-          ))}
-        </View>
-      </View>
-
+  return (
+    <ScrollView style={styles.tabScrollView} contentContainerStyle={styles.tabScrollContent} showsVerticalScrollIndicator={false}>
       <Pressable
-        style={[styles.leaveButton, isLeader && styles.endButton]}
-        onPress={isLeader ? onEnd : onLeave}
+        style={[styles.inviteToggle, { backgroundColor: colors.cardBackgroundElevated }]}
+        onPress={() => setShowInvite(!showInvite)}
       >
-        <Text style={[styles.leaveButtonText, isLeader && styles.endButtonText]}>
-          {isLeader ? "End Convoy" : "Leave Convoy"}
-        </Text>
+        <SymbolView name="person.badge.plus" tintColor="#007AFF" size={18} />
+        <Text style={[styles.inviteToggleText, { color: colors.textPrimary }]}>Invite Friends</Text>
+        <SymbolView name={showInvite ? "chevron.up" : "chevron.down"} tintColor={colors.textTertiary} size={12} />
       </Pressable>
+
+      {showInvite && <InviteSection onInvite={onInvite} convoy={convoy} colors={colors} />}
+
+      <View style={styles.membersList}>
+        {convoy.members?.map((member) => (
+          <MemberRow
+            key={member.user_id}
+            member={member}
+            isCurrentUser={member.user_id === session?.userId}
+            isLeader={isLeader}
+            colors={colors}
+            onKick={() => onKick(member.user_id, member.display_name ?? member.username)}
+          />
+        ))}
+      </View>
     </ScrollView>
   );
 }
 
 function InviteSection({
   onInvite,
+  convoy,
   colors,
 }: {
   onInvite: (userId: string) => void;
+  convoy: NonNullable<ReturnType<typeof useConvoyState>["convoy"]>;
   colors: ReturnType<typeof useSheetColors>;
 }) {
   const { data: friends } = useFriends();
   const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
+
+  const memberIds = new Set(convoy.members?.map((m) => m.user_id) ?? []);
+  const availableFriends = friends?.filter((f) => !memberIds.has(f.id)) ?? [];
 
   const handleInvite = (userId: string) => {
     onInvite(userId);
     setInvitedIds((prev) => new Set([...prev, userId]));
   };
 
-  if (!friends || friends.length === 0) {
+  if (availableFriends.length === 0) {
     return (
       <View style={styles.inviteSection}>
         <Text style={[styles.inviteEmpty, { color: colors.textSecondary }]}>
-          No friends to invite yet.
+          {friends?.length === 0 ? "No friends to invite yet." : "All friends are already in the convoy."}
         </Text>
       </View>
     );
@@ -202,7 +317,7 @@ function InviteSection({
 
   return (
     <View style={styles.inviteSection}>
-      {friends.map((friend) => (
+      {availableFriends.map((friend) => (
         <InviteRow
           key={friend.id}
           friend={friend}
@@ -247,55 +362,18 @@ function InviteRow({
   );
 }
 
-function RouteSection({
-  onSetRoute,
-  colors,
-}: {
-  onSetRoute: (name: string, lat: number, lng: number) => void;
-  colors: ReturnType<typeof useSheetColors>;
-}) {
-  const [name, setName] = useState("");
-
-  const handleSubmit = () => {
-    if (!name.trim()) return;
-    // For now, use 0,0 coordinates — a proper implementation would use a place picker
-    onSetRoute(name.trim(), 0, 0);
-    setName("");
-  };
-
-  return (
-    <View style={styles.routeSection}>
-      <View style={[styles.routeInput, { backgroundColor: colors.cardBackgroundElevated }]}>
-        <SymbolView name="mappin" tintColor={colors.textTertiary} size={16} />
-        <TextInput
-          style={[styles.routeTextInput, { color: colors.textPrimary }]}
-          placeholder="Destination name..."
-          placeholderTextColor={colors.textTertiary}
-          value={name}
-          onChangeText={setName}
-          onSubmitEditing={handleSubmit}
-          returnKeyType="done"
-        />
-      </View>
-      <Pressable
-        style={[styles.routeButton, !name.trim() && styles.routeButtonDisabled]}
-        onPress={handleSubmit}
-        disabled={!name.trim()}
-      >
-        <Text style={styles.routeButtonText}>Set</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 function MemberRow({
   member,
   isCurrentUser,
+  isLeader,
   colors,
+  onKick,
 }: {
   member: ConvoyMemberOut;
   isCurrentUser: boolean;
+  isLeader: boolean;
   colors: ReturnType<typeof useSheetColors>;
+  onKick: () => void;
 }) {
   const carName =
     member.car_year && member.car_make && member.car_model
@@ -303,7 +381,7 @@ function MemberRow({
       : null;
 
   return (
-    <View style={styles.memberRow}>
+    <View style={[styles.memberRow, { backgroundColor: colors.cardBackground }]}>
       <View style={[styles.memberAvatar, { backgroundColor: colors.avatarBackground }]}>
         <SymbolView name="person.fill" tintColor={colors.textTertiary} size={16} />
       </View>
@@ -320,18 +398,203 @@ function MemberRow({
           <Text style={[styles.memberCar, { color: colors.textSecondary }]}>{carName}</Text>
         )}
       </View>
+      {isLeader && !isCurrentUser && member.role !== "leader" && (
+        <Pressable style={styles.kickButton} onPress={onKick}>
+          <SymbolView name="xmark" tintColor="#FF3B30" size={12} />
+        </Pressable>
+      )}
     </View>
+  );
+}
+
+function ChatTab({
+  convoyId,
+  colors,
+}: {
+  convoyId: string;
+  colors: ReturnType<typeof useSheetColors>;
+}) {
+  const { data: messages, isLoading } = useConvoyMessages(convoyId);
+  const sendMessage = useSendConvoyMessage(convoyId);
+  const [text, setText] = useState("");
+  const { session } = useAuth();
+
+  const handleSend = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    sendMessage.mutate(trimmed);
+    setText("");
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.chatLoading}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.chatContainer}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={200}
+    >
+      {(!messages || messages.length === 0) ? (
+        <View style={styles.chatEmpty}>
+          <SymbolView name="bubble.left.and.bubble.right" tintColor={colors.textTertiary} size={32} />
+          <Text style={[styles.chatEmptyText, { color: colors.textSecondary }]}>
+            No messages yet. Say something!
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={messages}
+          keyExtractor={(m) => m.id}
+          renderItem={({ item }) => (
+            <MessageBubble message={item} isOwn={item.sender_id === session?.userId} colors={colors} />
+          )}
+          contentContainerStyle={styles.messagesList}
+          inverted={false}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+
+      <View style={[styles.chatInputBar, { backgroundColor: colors.cardBackgroundElevated }]}>
+        <TextInput
+          style={[styles.chatInput, { color: colors.textPrimary }]}
+          placeholder="Message..."
+          placeholderTextColor={colors.textTertiary}
+          value={text}
+          onChangeText={setText}
+          onSubmitEditing={handleSend}
+          returnKeyType="send"
+          multiline={false}
+        />
+        <Pressable
+          style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
+          onPress={handleSend}
+          disabled={!text.trim() || sendMessage.isPending}
+        >
+          <SymbolView name="arrow.up.circle.fill" tintColor={text.trim() ? "#007AFF" : colors.textTertiary} size={28} />
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+function MessageBubble({
+  message,
+  isOwn,
+  colors,
+}: {
+  message: ConvoyMessageOut;
+  isOwn: boolean;
+  colors: ReturnType<typeof useSheetColors>;
+}) {
+  if (message.message_type === "system") {
+    return (
+      <View style={styles.systemMessage}>
+        <Text style={[styles.systemMessageText, { color: colors.textTertiary }]}>
+          {message.content}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.messageBubbleRow, isOwn && styles.messageBubbleRowOwn]}>
+      <View style={[styles.messageBubble, isOwn ? styles.messageBubbleOwn : { backgroundColor: colors.cardBackgroundElevated }]}>
+        {!isOwn && message.sender_username && (
+          <Text style={styles.messageSender}>@{message.sender_username}</Text>
+        )}
+        <Text style={[styles.messageText, isOwn && styles.messageTextOwn, !isOwn && { color: colors.textPrimary }]}>
+          {message.content}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function RouteTab({
+  convoyId,
+  colors,
+  onSetRoute,
+}: {
+  convoyId: string;
+  colors: ReturnType<typeof useSheetColors>;
+  onSetRoute: (name: string, lat: number, lng: number) => void;
+}) {
+  const { data: route, isLoading } = useConvoyRoute(convoyId);
+  const [name, setName] = useState("");
+
+  const handleSubmit = () => {
+    if (!name.trim()) return;
+    onSetRoute(name.trim(), 0, 0);
+    setName("");
+  };
+
+  return (
+    <ScrollView style={styles.tabScrollView} contentContainerStyle={styles.tabScrollContent} showsVerticalScrollIndicator={false}>
+      {isLoading ? (
+        <ActivityIndicator style={styles.routeLoading} />
+      ) : route ? (
+        <View style={[styles.activeRoute, { backgroundColor: colors.cardBackgroundElevated }]}>
+          <View style={styles.routeIconContainer}>
+            <SymbolView name="mappin.circle.fill" tintColor="#FF9500" size={28} />
+          </View>
+          <View style={styles.activeRouteInfo}>
+            <Text style={[styles.activeRouteName, { color: colors.textPrimary }]}>
+              {route.destination_name}
+            </Text>
+            <Text style={[styles.activeRouteMeta, { color: colors.textSecondary }]}>
+              Set by @{route.set_by_username}
+            </Text>
+          </View>
+          <View style={styles.activeRouteBadge}>
+            <Text style={styles.activeRouteBadgeText}>ACTIVE</Text>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.noRoute}>
+          <SymbolView name="map" tintColor={colors.textTertiary} size={28} />
+          <Text style={[styles.noRouteText, { color: colors.textSecondary }]}>
+            No route set yet
+          </Text>
+        </View>
+      )}
+
+      <View style={styles.setRouteSection}>
+        <Text style={[styles.setRouteLabel, { color: colors.textSecondary }]}>Set Destination</Text>
+        <View style={styles.setRouteRow}>
+          <View style={[styles.routeInput, { backgroundColor: colors.cardBackgroundElevated }]}>
+            <SymbolView name="mappin" tintColor={colors.textTertiary} size={16} />
+            <TextInput
+              style={[styles.routeTextInput, { color: colors.textPrimary }]}
+              placeholder="Destination name..."
+              placeholderTextColor={colors.textTertiary}
+              value={name}
+              onChangeText={setName}
+              onSubmitEditing={handleSubmit}
+              returnKeyType="done"
+            />
+          </View>
+          <Pressable
+            style={[styles.routeSubmitButton, !name.trim() && styles.routeSubmitDisabled]}
+            onPress={handleSubmit}
+            disabled={!name.trim()}
+          >
+            <Text style={styles.routeSubmitText}>Set</Text>
+          </Pressable>
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 40,
   },
   loadingContainer: {
     flex: 1,
@@ -379,56 +642,99 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
-  lobbyHeader: {
-    marginBottom: 20,
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
-  lobbyTitleRow: {
+  headerTop: {
+    gap: 4,
+  },
+  headerTitle: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  lobbyTitle: {
+  convoyName: {
     fontSize: 22,
     fontWeight: "700",
     letterSpacing: -0.4,
   },
   statusBadge: {
-    backgroundColor: "rgba(52, 199, 89, 0.15)",
+    backgroundColor: "rgba(142, 142, 147, 0.15)",
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
+  statusBadgeActive: {
+    backgroundColor: "rgba(52, 199, 89, 0.15)",
+  },
   statusBadgeText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#34C759",
+    color: "#8E8E93",
     letterSpacing: 0.5,
   },
-  lobbySubtitle: {
+  statusBadgeTextActive: {
+    color: "#34C759",
+  },
+  headerSubtitle: {
     fontSize: 14,
-    marginTop: 4,
   },
-  actionButtons: {
+  tabBar: {
     flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    gap: 8,
+    marginBottom: 12,
   },
-  actionButton: {
+  tabButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    borderRadius: 12,
-    paddingVertical: 12,
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "rgba(142, 142, 147, 0.08)",
   },
-  actionButtonText: {
-    fontSize: 14,
+  tabButtonActive: {
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+  },
+  tabLabel: {
+    fontSize: 13,
     fontWeight: "600",
+    color: "#8E8E93",
+  },
+  tabLabelActive: {
+    color: "#007AFF",
+  },
+  tabContent: {
+    flex: 1,
+  },
+  tabScrollView: {
+    flex: 1,
+  },
+  tabScrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  inviteToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  inviteToggleText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
   },
   inviteSection: {
     marginBottom: 16,
-    gap: 6,
+    gap: 4,
   },
   inviteEmpty: {
     textAlign: "center",
@@ -471,67 +777,21 @@ const styles = StyleSheet.create({
   inviteButtonTextSent: {
     color: "#8E8E93",
   },
-  routeSection: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
-  },
-  routeInput: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  routeTextInput: {
-    flex: 1,
-    fontSize: 15,
-    padding: 0,
-  },
-  routeButton: {
-    backgroundColor: "#FF9500",
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  routeButtonDisabled: {
-    opacity: 0.4,
-  },
-  routeButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 10,
-    marginLeft: 4,
-  },
-  memberList: {
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  membersList: {
     gap: 8,
   },
   memberRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     gap: 12,
   },
   memberAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -551,20 +811,216 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 1,
   },
-  leaveButton: {
-    alignItems: "center",
-    paddingVertical: 14,
+  kickButton: {
+    width: 28,
+    height: 28,
     borderRadius: 14,
-    backgroundColor: "rgba(142, 142, 147, 0.12)",
-    marginTop: 8,
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  leaveButtonText: {
-    fontSize: 15,
+  chatContainer: {
+    flex: 1,
+  },
+  chatLoading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  chatEmpty: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+    paddingBottom: 60,
+  },
+  chatEmptyText: {
+    fontSize: 14,
+    textAlign: "center",
+  },
+  messagesList: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  systemMessage: {
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  systemMessageText: {
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+  messageBubbleRow: {
+    flexDirection: "row",
+    justifyContent: "flex-start",
+  },
+  messageBubbleRowOwn: {
+    justifyContent: "flex-end",
+  },
+  messageBubble: {
+    maxWidth: "75%",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  messageBubbleOwn: {
+    backgroundColor: "#007AFF",
+  },
+  messageSender: {
+    fontSize: 11,
     fontWeight: "600",
     color: "#8E8E93",
+    marginBottom: 2,
   },
-  endButton: {
+  messageText: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  messageTextOwn: {
+    color: "#FFFFFF",
+  },
+  chatInputBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 20,
+    paddingLeft: 16,
+    paddingRight: 6,
+    paddingVertical: 6,
+    gap: 8,
+  },
+  chatInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 4,
+  },
+  sendButton: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
+  routeLoading: {
+    marginTop: 40,
+  },
+  activeRoute: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+    marginBottom: 20,
+  },
+  routeIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 149, 0, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  activeRouteInfo: {
+    flex: 1,
+  },
+  activeRouteName: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  activeRouteMeta: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  activeRouteBadge: {
+    backgroundColor: "rgba(52, 199, 89, 0.15)",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  activeRouteBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#34C759",
+    letterSpacing: 0.5,
+  },
+  noRoute: {
+    alignItems: "center",
+    paddingVertical: 32,
+    gap: 10,
+  },
+  noRouteText: {
+    fontSize: 14,
+  },
+  setRouteSection: {
+    gap: 8,
+  },
+  setRouteLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginLeft: 4,
+  },
+  setRouteRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  routeInput: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  routeTextInput: {
+    flex: 1,
+    fontSize: 15,
+    padding: 0,
+  },
+  routeSubmitButton: {
+    backgroundColor: "#FF9500",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  routeSubmitDisabled: {
+    opacity: 0.4,
+  },
+  routeSubmitText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  footer: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  footerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  leaveButtonStyle: {
+    backgroundColor: "rgba(142, 142, 147, 0.12)",
+  },
+  endButtonStyle: {
     backgroundColor: "rgba(255, 59, 48, 0.08)",
+  },
+  footerButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#8E8E93",
   },
   endButtonText: {
     color: "#FF3B30",
