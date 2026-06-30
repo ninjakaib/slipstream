@@ -18,6 +18,7 @@ import { GlassView } from "expo-glass-effect";
 import { useViewportCells } from "@/hooks/use-viewport-cells";
 import type { DriverData } from "@/hooks/use-websocket";
 import type { ViewportBounds } from "@/lib/spatial";
+import { useSelectedDriverStore } from "@/stores/selected-driver-store";
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ?? "");
 
@@ -26,7 +27,6 @@ const DRIVER_ARROW_ICON = require("@/assets/images/driver-arrow.png");
 interface LiveMapProps {
   drivers: Record<string, DriverData>;
   onCellsChanged: (cells: string[], resolution: number) => void;
-  onDriverSelected?: (userId: string) => void;
 }
 
 function driversToGeoJSON(
@@ -68,7 +68,8 @@ const DEFAULT_CAMERA = {
 // driving: racing cam — follows course, high pitch, close zoom
 type TrackingState = "off" | "follow" | "followHeading" | "driving";
 
-export function LiveMap({ drivers, onCellsChanged, onDriverSelected }: LiveMapProps) {
+export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
+  const selectDriver = useSelectedDriverStore((s) => s.selectDriver);
   const mapRef = useRef<MapView>(null);
   const cameraRef = useRef<Camera>(null);
   const { handleCameraChanged } = useViewportCells(onCellsChanged);
@@ -139,14 +140,29 @@ export function LiveMap({ drivers, onCellsChanged, onDriverSelected }: LiveMapPr
 
   const handleDriverPress = useCallback(
     (event: { features: Array<GeoJSON.Feature> }) => {
+      console.log("[LiveMap] handleDriverPress fired", {
+        featureCount: event.features?.length,
+        features: event.features?.map((f) => f.properties),
+      });
       const feature = event.features?.[0];
       const userId = feature?.properties?.user_id as string | undefined;
-      if (userId) onDriverSelected?.(userId);
+      if (userId) {
+        console.log("[LiveMap] selecting driver:", userId);
+        selectDriver(userId);
+      } else {
+        console.warn("[LiveMap] No user_id in tapped feature", feature?.properties);
+      }
     },
-    [onDriverSelected],
+    [selectDriver],
   );
 
-  const geoJSON = useMemo(() => driversToGeoJSON(drivers), [drivers]);
+  const geoJSON = useMemo(() => {
+    const json = driversToGeoJSON(drivers);
+    if (json.features.length > 0) {
+      console.log("[LiveMap] GeoJSON updated, feature count:", json.features.length);
+    }
+    return json;
+  }, [drivers]);
 
   const onMapIdle = useCallback(
     (state: MapState) => {

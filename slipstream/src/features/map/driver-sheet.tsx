@@ -10,46 +10,50 @@ import { Image } from "expo-image";
 import { SymbolView } from "expo-symbols";
 import { GlassView } from "expo-glass-effect";
 
-import { getUserProfile, sendFriendRequest } from "@/lib/api";
-import type { PublicUserProfile } from "@/lib/api";
+import { sendFriendRequest } from "@/lib/api";
+import { useUserProfile } from "@/hooks/queries/use-user-profile";
+import { useSelectedDriverStore } from "@/stores/selected-driver-store";
 
-interface DriverSheetProps {
-  userId: string;
-  onClose: () => void;
-  onInviteToConvoy?: (userId: string) => void;
-}
-
-export function DriverSheet({ userId, onClose, onInviteToConvoy }: DriverSheetProps) {
-  const [profile, setProfile] = useState<PublicUserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+export function DriverSheet() {
+  const { selectedDriverId, clearSelection } = useSelectedDriverStore();
+  const { data: profile, isLoading, error } = useUserProfile(selectedDriverId);
   const [friendRequestSent, setFriendRequestSent] = useState(false);
 
+  // Log lifecycle for debugging
   useEffect(() => {
-    (async () => {
-      const { data } = await getUserProfile({ path: { user_id: userId } });
-      if (data) setProfile(data);
-      setLoading(false);
-    })();
-  }, [userId]);
+    console.log("[DriverSheet] mounted/updated", {
+      selectedDriverId,
+      isLoading,
+      hasProfile: !!profile,
+      error: error?.message,
+    });
+  }, [selectedDriverId, isLoading, profile, error]);
 
   const handleAddFriend = useCallback(async () => {
-    const { error } = await sendFriendRequest({ body: { user_id: userId } });
-    if (!error) setFriendRequestSent(true);
-  }, [userId]);
+    if (!selectedDriverId) return;
+    const { error: reqError } = await sendFriendRequest({ body: { user_id: selectedDriverId } });
+    if (!reqError) setFriendRequestSent(true);
+  }, [selectedDriverId]);
 
   const handleInvite = useCallback(() => {
-    onInviteToConvoy?.(userId);
-  }, [userId, onInviteToConvoy]);
+    // TODO: implement convoy invite
+    console.log("[DriverSheet] invite to convoy:", selectedDriverId);
+  }, [selectedDriverId]);
 
+  // Reset friend request state when driver changes
   useEffect(() => {
-    if (!loading && !profile) {
-      onClose();
-    }
-  }, [loading, profile, onClose]);
+    setFriendRequestSent(false);
+  }, [selectedDriverId]);
 
-  if (loading) {
+  // Don't render if no driver selected
+  if (!selectedDriverId) {
+    return null;
+  }
+
+  if (isLoading) {
     return (
       <View style={styles.container}>
+        <Pressable style={styles.backdrop} onPress={clearSelection} />
         <GlassView style={styles.sheet} glassEffectStyle="regular">
           <ActivityIndicator color="#fff" />
         </GlassView>
@@ -57,7 +61,8 @@ export function DriverSheet({ userId, onClose, onInviteToConvoy }: DriverSheetPr
     );
   }
 
-  if (!profile) {
+  if (error || !profile) {
+    console.warn("[DriverSheet] No profile or error, dismissing", { error: error?.message });
     return null;
   }
 
@@ -67,7 +72,7 @@ export function DriverSheet({ userId, onClose, onInviteToConvoy }: DriverSheetPr
 
   return (
     <View style={styles.container}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      <Pressable style={styles.backdrop} onPress={clearSelection} />
       <GlassView style={styles.sheet} glassEffectStyle="regular">
         {/* Handle */}
         <View style={styles.handle} />

@@ -8,6 +8,7 @@ import { LiveMap } from "@/features/map/live-map";
 import { useLocation } from "@/hooks/use-location";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useDriversStore } from "@/stores/drivers-store";
+import { useSelectedDriverStore } from "@/stores/selected-driver-store";
 import { MapSheet } from "@/components/map-sheet/map-sheet";
 
 const SERVER_URL = process.env.EXPO_PUBLIC_WS_URL ?? null;
@@ -45,7 +46,7 @@ export default function MapScreen() {
 
   const [currentResolution, setCurrentResolution] = useState(0);
   const [cellCount, setCellCount] = useState(0);
-  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
+  const selectedDriverId = useSelectedDriverStore((s) => s.selectedDriverId);
 
   const handleCellsChanged = useCallback(
     (cells: string[], resolution: number) => {
@@ -61,7 +62,6 @@ export default function MapScreen() {
       <LiveMap
         drivers={drivers}
         onCellsChanged={handleCellsChanged}
-        onDriverSelected={setSelectedDriverId}
       />
 
       {/* Connection status indicator */}
@@ -76,12 +76,7 @@ export default function MapScreen() {
         />
       </View>
 
-      {selectedDriverId && (
-        <DriverSheet
-          userId={selectedDriverId}
-          onClose={() => setSelectedDriverId(null)}
-        />
-      )}
+      {selectedDriverId && <DriverSheet />}
 
       <MapSheet />
 
