@@ -560,17 +560,17 @@ export type RefreshRequest = {
  */
 export type RegisterRequest = {
     /**
-     * Username
+     * Email
      */
-    username: string;
+    email: string;
     /**
      * Password
      */
     password: string;
     /**
-     * Email
+     * Username
      */
-    email?: string | null;
+    username?: string | null;
     /**
      * Display Name
      */

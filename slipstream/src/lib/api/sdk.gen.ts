@@ -22,6 +22,9 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  * Register
  *
  * Create a new user account and return tokens.
+ *
+ * Signup collects only email + password; the username is a temp handle the
+ * user replaces during onboarding (unless a client explicitly supplies one).
  */
 export const register = <ThrowOnError extends boolean = false>(options: Options<RegisterData, ThrowOnError>) => (options.client ?? client).post<RegisterResponses, RegisterErrors, ThrowOnError>({
     url: '/auth/register',
@@ -56,7 +59,7 @@ export const authWithApple = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Login
  *
- * Authenticate with username and password, return tokens.
+ * Authenticate with email (or username) and password, return tokens.
  */
 export const login = <ThrowOnError extends boolean = false>(options: Options<LoginData, ThrowOnError>) => (options.client ?? client).post<LoginResponses, LoginErrors, ThrowOnError>({
     url: '/auth/login',

@@ -49,7 +49,20 @@ interface OnboardingState {
   hydrate: (currentUsername: string) => Promise<void>;
   /** Persist everything to the API. Throws on failure. */
   submit: () => Promise<void>;
+  /** Restore every draft field to its default (call on logout / new signup). */
+  reset: () => void;
 }
+
+/** Default draft values — reused at creation and by `reset()`. */
+const initialDraft = {
+  displayName: "",
+  username: "",
+  country: COUNTRIES[0],
+  phoneNumber: "",
+  vehicles: [] as VehicleDraft[],
+  speedUnit: "mph" as SpeedUnit,
+  currentUsername: "",
+};
 
 let vehicleSeq = 0;
 const nextVehicleId = () => `v${++vehicleSeq}`;
@@ -60,13 +73,7 @@ function isTempUsername(username: string): boolean {
 }
 
 export const useOnboardingStore = create<OnboardingState>((set, get) => ({
-  displayName: "",
-  username: "",
-  country: COUNTRIES[0],
-  phoneNumber: "",
-  vehicles: [],
-  speedUnit: "mph",
-  currentUsername: "",
+  ...initialDraft,
 
   setDisplayName: (v) => set({ displayName: v }),
   setUsername: (v) => set({ username: v }),
@@ -152,4 +159,6 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       }
     }
   },
+
+  reset: () => set({ ...initialDraft }),
 }));

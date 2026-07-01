@@ -74,9 +74,13 @@ export default function OnboardingLayout() {
 function OnboardingHydrator() {
   const { session } = useAuth();
   const hydrate = useOnboardingStore((s) => s.hydrate);
+  const reset = useOnboardingStore((s) => s.reset);
   const username = session?.username ?? "";
 
   useEffect(() => {
+    // Clear any leftover draft (e.g. from a previous account this session),
+    // then prefill from the current user's server profile.
+    reset();
     hydrate(username);
     // Run once per mount; username is stable for the onboarding session.
     // eslint-disable-next-line react-hooks/exhaustive-deps

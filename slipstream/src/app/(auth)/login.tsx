@@ -36,24 +36,23 @@ export default function EmailAuthScreen() {
   const { login, register } = useAuth();
 
   const [mode, setMode] = useState<Mode>("register");
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!username.trim() || !password.trim()) {
-      setError("Username and password are required");
+    if (!email.trim() || !password.trim()) {
+      setError("Email and password are required");
       return;
     }
     setLoading(true);
     setError(null);
     try {
       if (mode === "login") {
-        await login(username.trim(), password);
+        await login(email.trim(), password);
       } else {
-        await register(username.trim(), password, displayName.trim() || undefined);
+        await register(email.trim(), password);
       }
       // Auth gate routes onward on success.
     } catch (e) {
@@ -94,32 +93,26 @@ export default function EmailAuthScreen() {
           </Text>
           <Text style={styles.subtitle}>
             {mode === "login"
-              ? "Sign in with your username and password."
-              : "Pick a username and password to get started."}
+              ? "Sign in with your email and password."
+              : "Sign up with your email and password to get started."}
           </Text>
 
           <View style={styles.form}>
-            {mode === "register" && (
-              <OnboardingInput
-                placeholder="Display name (optional)"
-                value={displayName}
-                onChangeText={setDisplayName}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
-            )}
             <OnboardingInput
-              placeholder="Username"
-              value={username}
-              onChangeText={setUsername}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
               autoCapitalize="none"
               autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="emailAddress"
             />
             <OnboardingInput
               placeholder="Password"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              textContentType={mode === "login" ? "password" : "newPassword"}
             />
 
             {error && <Text style={styles.error}>{error}</Text>}

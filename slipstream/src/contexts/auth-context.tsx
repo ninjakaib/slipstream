@@ -30,18 +30,16 @@ import {
   saveSession,
   type StoredSession,
 } from "@/lib/auth";
+import { useOnboardingStore } from "@/stores/onboarding-store";
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 interface AuthContextValue {
   status: AuthStatus;
   session: StoredSession | null;
-  login: (username: string, password: string) => Promise<void>;
-  register: (
-    username: string,
-    password: string,
-    displayName?: string,
-  ) => Promise<void>;
+  /** `identifier` is an email or username. */
+  login: (identifier: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
   signInWithApple: () => Promise<{ isNewUser: boolean } | null>;
   logout: () => Promise<void>;
 }
@@ -87,11 +85,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
-    console.log("[Auth] login attempt", { username, baseUrl: process.env.EXPO_PUBLIC_API_URL });
+  const login = useCallback(async (identifier: string, password: string) => {
+    console.log("[Auth] login attempt", { identifier, baseUrl: process.env.EXPO_PUBLIC_API_URL });
 
+    // The backend `username` field accepts an email or a username.
     const { data, error, response } = await apiLogin({
-      body: { username, password },
+      body: { username: identifier, password },
     });
 
     console.log("[Auth] login response", {
@@ -122,36 +121,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("authenticated");
   }, []);
 
-  const register = useCallback(
-    async (username: string, password: string, displayName?: string) => {
-      const { data, error } = await apiRegister({
-        body: {
-          username,
-          password,
-          display_name: displayName || undefined,
-        },
-      });
+  const register = useCallback(async (email: string, password: string) => {
+    // Signup collects only email + password; the backend mints a temp username
+    // that onboarding replaces. Display name/username are set during onboarding.
+    const { data, error } = await apiRegister({
+      body: { email, password },
+    });
 
-      if (error || !data) {
-        throw new Error(
-          (error as { detail?: string })?.detail ?? "Registration failed",
-        );
-      }
+    if (error || !data) {
+      const err = error as { detail?: string | Array<{ msg: string }> };
+      const message = Array.isArray(err?.detail)
+        ? err.detail.map((d) => d.msg).join(", ")
+        : err?.detail ?? "Registration failed";
+      throw new Error(message);
+    }
 
-      const newSession: StoredSession = {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        userId: data.user_id,
-        username: data.username,
-      };
+    const newSession: StoredSession = {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      userId: data.user_id,
+      username: data.username,
+    };
 
-      await saveSession(newSession);
-      configureClient(newSession.accessToken);
-      setSession(newSession);
-      setStatus("authenticated");
-    },
-    [],
-  );
+    await saveSession(newSession);
+    configureClient(newSession.accessToken);
+    setSession(newSession);
+    setStatus("authenticated");
+  }, []);
 
   const signInWithApple = useCallback(async () => {
     let credential: AppleAuthentication.AppleAuthenticationCredential;
@@ -214,6 +210,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await clearSession();
+    // Clear any onboarding draft so the next account starts from a clean slate.
+    useOnboardingStore.getState().reset();
     setSession(null);
     setStatus("unauthenticated");
   }, []);

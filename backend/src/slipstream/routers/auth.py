@@ -1,11 +1,12 @@
 """Auth router — registration, login, token refresh, logout."""
 
+import secrets
 from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
-from sqlalchemy import select
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from slipstream.auth import (
@@ -31,13 +32,18 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class RegisterRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=20, pattern=r"^[a-zA-Z0-9_]+$")
+    email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    email: str | None = None
+    # Optional at signup — a temp handle is generated and onboarding sets the
+    # real username later. Still validated if a client chooses to supply one.
+    username: str | None = Field(
+        default=None, min_length=3, max_length=20, pattern=r"^[a-zA-Z0-9_]+$"
+    )
     display_name: str | None = None
 
 
 class LoginRequest(BaseModel):
+    # Accepts either an email or a username (see `login`).
     username: str
     password: str
 
@@ -85,6 +91,31 @@ class AppleAuthResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+async def _unique_temp_username(db: AsyncSession, seed: str | None = None) -> str:
+    """Generate a throwaway `user_xxxx` handle the user replaces in onboarding.
+
+    Prefers a deterministic handle derived from `seed` (e.g. an apple_id) so
+    the same account keeps a stable temp handle; falls back to random hex and
+    retries on the (rare) collision.
+    """
+    if seed:
+        candidate = f"user_{seed[:8].lower()}"
+        existing = await db.execute(select(User).where(User.username == candidate))
+        if existing.scalar_one_or_none() is None:
+            return candidate
+
+    while True:
+        candidate = f"user_{secrets.token_hex(4)}"
+        existing = await db.execute(select(User).where(User.username == candidate))
+        if existing.scalar_one_or_none() is None:
+            return candidate
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -95,22 +126,39 @@ class AppleAuthResponse(BaseModel):
 async def register(
     body: RegisterRequest, db: AsyncSession = Depends(get_db)
 ) -> TokenResponse:
-    """Create a new user account and return tokens."""
-    # Check if username is taken
-    existing = await db.execute(
-        select(User).where(User.username == body.username.lower())
-    )
-    if existing.scalar_one_or_none() is not None:
+    """Create a new user account and return tokens.
+
+    Signup collects only email + password; the username is a temp handle the
+    user replaces during onboarding (unless a client explicitly supplies one).
+    """
+    email = body.email.strip().lower()
+
+    # One account per email — keeps email-based login unambiguous.
+    existing_email = await db.execute(select(User).where(User.email == email))
+    if existing_email.scalar_one_or_none() is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Username already taken",
+            detail="Email already registered",
         )
+
+    # Resolve the username: honor an explicit one (validating uniqueness), else
+    # mint a temp handle for onboarding to replace.
+    if body.username is not None:
+        username = body.username.lower()
+        existing = await db.execute(select(User).where(User.username == username))
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already taken",
+            )
+    else:
+        username = await _unique_temp_username(db)
 
     # Create user
     user = User(
-        username=body.username.lower(),
+        username=username,
         password_hash=hash_password(body.password),
-        email=body.email,
+        email=email,
         display_name=body.display_name,
     )
     db.add(user)
@@ -198,18 +246,8 @@ async def auth_with_apple(
         is_new_user = user is None
 
         if is_new_user:
-            # Create new user
-            # Generate a temporary username from apple_id (user will set their own in onboarding)
-            temp_username = f"user_{apple_user_id[:8].lower()}"
-
-            # Ensure username is unique by appending random suffix if needed
-            existing = await db.execute(
-                select(User).where(User.username == temp_username)
-            )
-            if existing.scalar_one_or_none() is not None:
-                import secrets
-
-                temp_username = f"user_{secrets.token_hex(4)}"
+            # Create new user with a temp handle (user sets their own in onboarding)
+            temp_username = await _unique_temp_username(db, seed=apple_user_id)
 
             # Build display name from full_name if provided
             display_name = None
@@ -283,9 +321,10 @@ async def auth_with_apple(
 async def login(
     body: LoginRequest, db: AsyncSession = Depends(get_db)
 ) -> TokenResponse:
-    """Authenticate with username and password, return tokens."""
+    """Authenticate with email (or username) and password, return tokens."""
+    ident = body.username.strip().lower()
     result = await db.execute(
-        select(User).where(User.username == body.username.lower())
+        select(User).where(or_(User.username == ident, User.email == ident))
     )
     user = result.scalar_one_or_none()
 
