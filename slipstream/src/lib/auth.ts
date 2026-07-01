@@ -104,6 +104,44 @@ export function configureClient(accessToken?: string): void {
   currentToken = accessToken || null;
 }
 
+// ---------------------------------------------------------------------------
+// Automatic token refresh on 401
+// ---------------------------------------------------------------------------
+
+/**
+ * Handlers the auth context registers so it can react when a request-driven
+ * refresh succeeds (update in-memory session) or ultimately fails (log out).
+ */
+export interface AuthEventHandlers {
+  onSessionRefreshed?: (session: StoredSession) => void;
+  onSessionExpired?: () => void;
+}
+
+let authEventHandlers: AuthEventHandlers = {};
+
+export function setAuthEventHandlers(handlers: AuthEventHandlers): void {
+  authEventHandlers = handlers;
+}
+
+// Dedupe concurrent refreshes: several requests can 401 at once (a screen that
+// fires multiple queries), but they should share a single refresh round-trip.
+let inFlightRefresh: Promise<StoredSession | null> | null = null;
+
+function refreshOnce(): Promise<StoredSession | null> {
+  if (!inFlightRefresh) {
+    inFlightRefresh = attemptTokenRefresh().finally(() => {
+      inFlightRefresh = null;
+    });
+  }
+  return inFlightRefresh;
+}
+
+// Requests to these paths must never trigger a refresh (a 401 here is a real
+// auth failure, and refreshing on /auth/refresh would recurse).
+const AUTH_PATHS = ["/auth/login", "/auth/register", "/auth/refresh", "/auth/apple"];
+// Marks a request that has already been retried once, so a second 401 doesn't loop.
+const RETRY_HEADER = "X-Slipstream-Retried";
+
 // One-time client setup — use whatwg-fetch to bypass Expo's broken native fetch
 console.log("[Auth] configuring client baseUrl:", BASE_URL);
 
@@ -119,4 +157,40 @@ client.interceptors.request.use((request) => {
   }
   console.log("[Auth] outgoing request:", request.method, request.url);
   return request;
+});
+
+// On a 401, transparently refresh the access token and retry the request once.
+// Access tokens are short-lived (15 min); without this, any REST call made
+// after expiry fails until the app is relaunched.
+client.interceptors.response.use(async (response, request) => {
+  if (response.status !== 401) return response;
+  // Only refresh if we were authenticated to begin with, haven't already
+  // retried this request, and it isn't an auth endpoint.
+  if (!currentToken) return response;
+  if (request.headers.has(RETRY_HEADER)) return response;
+  if (AUTH_PATHS.some((path) => request.url.includes(path))) return response;
+
+  const refreshed = await refreshOnce();
+  if (!refreshed) {
+    // Refresh token is gone/invalid — session is dead.
+    authEventHandlers.onSessionExpired?.();
+    return response;
+  }
+
+  configureClient(refreshed.accessToken);
+  authEventHandlers.onSessionRefreshed?.(refreshed);
+
+  // Replay the original request with the fresh token. Build the retry manually
+  // (bypassing the request interceptor) so we can set the marker header and the
+  // new Authorization explicitly.
+  try {
+    const retry = request.clone();
+    retry.headers.set("Authorization", `Bearer ${refreshed.accessToken}`);
+    retry.headers.set(RETRY_HEADER, "1");
+    return await (whatwgFetch as unknown as typeof globalThis.fetch)(retry);
+  } catch {
+    // If replay fails (e.g. body not clonable), surface the original 401 — the
+    // token is now refreshed, so the user's next action will succeed.
+    return response;
+  }
 });

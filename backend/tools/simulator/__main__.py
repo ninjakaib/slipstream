@@ -49,20 +49,38 @@ async def ensure_user(
     base_url: str,
     driver_index: int,
 ) -> tuple[str, str]:
-    """Register or login a simulated user, returning (user_id, access_token).
+    """Login or register a simulated user, returning (user_id, access_token).
 
-    Tries to register first. If the username is already taken (409), falls back
-    to login. This makes the simulator idempotent — rerunning it reuses existing
-    users in the database.
+    Tries to login first. If the user doesn't exist yet (401), falls back to
+    registering. Since the simulator reuses the same users on every run, login
+    is the common case — trying it first avoids an unnecessary register request.
     """
     username = f"sim_{driver_index:04d}"
+    email = f"{username}@sim.slipstream.app"
     display_name = f"Sim Driver {driver_index}"
     car_template = SIM_CARS[driver_index % len(SIM_CARS)]
 
-    # Try register
+    # Try login first — the common case, since users persist across runs
+    login_resp = await client.post(
+        f"{base_url}/auth/login",
+        json={"username": username, "password": SIM_PASSWORD},
+    )
+
+    if login_resp.status_code == 200:
+        data = login_resp.json()
+        logger.debug(f"[{username}] Logged in existing user: {data['user_id']}")
+        return data["user_id"], data["access_token"]
+
+    if login_resp.status_code != 401:
+        raise RuntimeError(
+            f"[{username}] Login failed ({login_resp.status_code}): {login_resp.text}"
+        )
+
+    # User doesn't exist yet — register with a dummy email
     register_resp = await client.post(
         f"{base_url}/auth/register",
         json={
+            "email": email,
             "username": username,
             "password": SIM_PASSWORD,
             "display_name": display_name,
@@ -82,21 +100,6 @@ async def ensure_user(
             headers={"Authorization": f"Bearer {token}"},
         )
         return user_id, token
-
-    if register_resp.status_code == 409:
-        # User already exists — login
-        login_resp = await client.post(
-            f"{base_url}/auth/login",
-            json={"username": username, "password": SIM_PASSWORD},
-        )
-        if login_resp.status_code == 200:
-            data = login_resp.json()
-            logger.debug(f"[{username}] Logged in existing user: {data['user_id']}")
-            return data["user_id"], data["access_token"]
-        else:
-            raise RuntimeError(
-                f"[{username}] Login failed ({login_resp.status_code}): {login_resp.text}"
-            )
 
     raise RuntimeError(
         f"[{username}] Register failed ({register_resp.status_code}): {register_resp.text}"
@@ -156,7 +159,7 @@ async def run_simulation(
         print("\nAborting. Start the server first.")
         return
 
-    # Register/login all simulated users
+    # Login (or register) all simulated users
     print(f"\n⏳ Provisioning {num_drivers} simulated users...")
     drivers: list[SimulatedDriver] = []
 

@@ -28,6 +28,7 @@ import {
   configureClient,
   loadSession,
   saveSession,
+  setAuthEventHandlers,
   type StoredSession,
 } from "@/lib/auth";
 import { useOnboardingStore } from "@/stores/onboarding-store";
@@ -83,6 +84,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("unauthenticated");
       }
     })();
+  }, []);
+
+  // React to background (401-triggered) token refreshes and hard expiry.
+  useEffect(() => {
+    setAuthEventHandlers({
+      onSessionRefreshed: (refreshed) => setSession(refreshed),
+      onSessionExpired: () => {
+        void clearSession();
+        setSession(null);
+        setStatus("unauthenticated");
+      },
+    });
+    return () => setAuthEventHandlers({});
   }, []);
 
   const login = useCallback(async (identifier: string, password: string) => {

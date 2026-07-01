@@ -22,20 +22,26 @@ export default function MapScreen() {
 
   useEffect(() => {
     const store = useDriversStore.getState();
-    const ids = Object.keys(wsDrivers);
-    if (ids.length === 0) {
+
+    // Only tear down on an explicit disconnect. A transient empty snapshot
+    // (viewport churn between driver exits and the next snapshot) is reconciled
+    // normally below — its removals trigger the interpolation buffer's grace
+    // period, which holds the markers briefly so a one-frame blip doesn't blank
+    // the map.
+    if (status === "disconnected") {
       store.clear();
       return;
     }
+
     store.setSnapshot(Object.values(wsDrivers));
 
-    const currentIds = new Set(ids);
-    for (const existingId of Object.keys(store.drivers)) {
+    const currentIds = new Set(Object.keys(wsDrivers));
+    for (const existingId of Object.keys(useDriversStore.getState().drivers)) {
       if (!currentIds.has(existingId)) {
         store.removeDriver(existingId);
       }
     }
-  }, [wsDrivers]);
+  }, [wsDrivers, status]);
 
   useLocation({
     onLocationUpdate: sendLocationUpdate,

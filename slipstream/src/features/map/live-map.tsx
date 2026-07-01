@@ -19,6 +19,10 @@ import { useViewportCells } from "@/hooks/use-viewport-cells";
 import type { DriverData } from "@/hooks/use-websocket";
 import type { ViewportBounds } from "@/lib/spatial";
 import { useSelectedDriverStore } from "@/stores/selected-driver-store";
+import {
+  DRIVERS_SOURCE_ID,
+  useDriverInterpolation,
+} from "./interpolation/use-driver-interpolation";
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ?? "");
 
@@ -72,6 +76,7 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
   const selectDriver = useSelectedDriverStore((s) => s.selectDriver);
   const mapRef = useRef<MapView>(null);
   const cameraRef = useRef<Camera>(null);
+  const shapeSourceRef = useRef<ShapeSource>(null);
   const { handleCameraChanged } = useViewportCells(onCellsChanged);
   const [tracking, setTracking] = useState<TrackingState>("off");
   const [show3d, setShow3d] = useState(false);
@@ -156,13 +161,20 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
     [selectDriver],
   );
 
-  const geoJSON = useMemo(() => {
-    const json = driversToGeoJSON(drivers);
-    if (json.features.length > 0) {
-      console.log("[LiveMap] GeoJSON updated, feature count:", json.features.length);
-    }
-    return json;
-  }, [drivers]);
+  // The declarative `shape` is structural-only: it changes identity only when
+  // the *set* of driver ids changes (add/remove), seeding the source with the
+  // latest known positions at that moment. Per-frame position/heading updates
+  // flow through the imperative rAF loop below (useDriverInterpolation), which
+  // pushes to the native source via setNativeProps — so a re-render here never
+  // fights the animation.
+  const driverIdsKey = Object.keys(drivers).sort().join(",");
+  const structuralGeoJSON = useMemo(
+    () => driversToGeoJSON(drivers),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild on id-set change only
+    [driverIdsKey],
+  );
+
+  useDriverInterpolation({ shapeSourceRef });
 
   const onMapIdle = useCallback(
     (state: MapState) => {
@@ -260,7 +272,13 @@ export function LiveMap({ drivers, onCellsChanged }: LiveMapProps) {
 
         <Images images={{ "driver-arrow": DRIVER_ARROW_ICON }} />
 
-        <ShapeSource id="drivers" shape={geoJSON} onPress={handleDriverPress} hitbox={{ width: 44, height: 44 }}>
+        <ShapeSource
+          id={DRIVERS_SOURCE_ID}
+          ref={shapeSourceRef}
+          shape={structuralGeoJSON}
+          onPress={handleDriverPress}
+          hitbox={{ width: 44, height: 44 }}
+        >
           <CircleLayer id="drivers-circle" style={circleStyle} />
           <SymbolLayer id="drivers-arrow" style={symbolStyle} />
         </ShapeSource>
