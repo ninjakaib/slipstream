@@ -1,5 +1,6 @@
 """Users router — profile management."""
 
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -37,6 +38,7 @@ class UserProfile(BaseModel):
     username: str
     display_name: str | None = None
     email: str | None = None
+    phone_number: str | None = None
     avatar_url: str | None = None
     visibility: VisibilityMode
     discovery_radius_miles: int
@@ -64,10 +66,17 @@ class UpdateProfileRequest(BaseModel):
     )
     display_name: str | None = Field(default=None, max_length=100)
     email: str | None = Field(default=None, max_length=255)
+    phone_number: str | None = Field(default=None, max_length=32)
     avatar_url: str | None = None
     visibility: VisibilityMode | None = None
     discovery_radius_miles: int | None = Field(default=None, ge=1, le=100)
     speed_unit: SpeedUnit | None = None
+
+
+class UsernameAvailability(BaseModel):
+    username: str
+    available: bool
+    reason: str | None = None
 
 
 class UserSearchResult(BaseModel):
@@ -115,6 +124,52 @@ def _get_active_car(user: User) -> CarSummary | None:
 # ---------------------------------------------------------------------------
 
 
+_USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]+$")
+
+
+@router.get("/check-username", response_model=UsernameAvailability)
+async def check_username(
+    username: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UsernameAvailability:
+    """Check whether a username is available for the current user to claim.
+
+    Validates format and length, then checks uniqueness (case-insensitive).
+    The caller's own current username is always reported available so a
+    pre-filled handle during onboarding doesn't read as "taken".
+    """
+    candidate = username.strip()
+    normalized = candidate.lower()
+
+    if len(candidate) < 3 or len(candidate) > 20:
+        return UsernameAvailability(
+            username=candidate,
+            available=False,
+            reason="Must be 3–20 characters.",
+        )
+    if not _USERNAME_PATTERN.match(candidate):
+        return UsernameAvailability(
+            username=candidate,
+            available=False,
+            reason="Only letters, numbers, and underscores.",
+        )
+
+    # The user's own handle is theirs to keep.
+    if normalized == current_user.username.lower():
+        return UsernameAvailability(username=candidate, available=True)
+
+    existing = await db.execute(select(User).where(User.username == normalized))
+    if existing.scalar_one_or_none() is not None:
+        return UsernameAvailability(
+            username=candidate,
+            available=False,
+            reason="That username is taken.",
+        )
+
+    return UsernameAvailability(username=candidate, available=True)
+
+
 @router.get("/me", response_model=UserProfile)
 async def get_my_profile(
     current_user: User = Depends(get_current_user),
@@ -132,6 +187,7 @@ async def get_my_profile(
         username=user.username,
         display_name=user.display_name,
         email=user.email,
+        phone_number=user.phone_number,
         avatar_url=user.avatar_url,
         visibility=user.visibility,
         discovery_radius_miles=user.discovery_radius_miles,
@@ -179,6 +235,7 @@ async def update_my_profile(
         username=user.username,
         display_name=user.display_name,
         email=user.email,
+        phone_number=user.phone_number,
         avatar_url=user.avatar_url,
         visibility=user.visibility,
         discovery_radius_miles=user.discovery_radius_miles,

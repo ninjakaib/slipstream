@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptFriendRequestData, AcceptFriendRequestErrors, AcceptFriendRequestResponses, AcceptJoinRequestData, AcceptJoinRequestErrors, AcceptJoinRequestResponses, ActivateCarData, ActivateCarErrors, ActivateCarResponses, AuthWithAppleData, AuthWithAppleErrors, AuthWithAppleResponses, CreateCarData, CreateCarErrors, CreateCarResponses, CreateConvoyData, CreateConvoyErrors, CreateConvoyResponses, DeclineFriendRequestData, DeclineFriendRequestErrors, DeclineFriendRequestResponses, DeclineJoinRequestData, DeclineJoinRequestErrors, DeclineJoinRequestResponses, DeleteAccountData, DeleteAccountResponses, DeleteCarData, DeleteCarErrors, DeleteCarResponses, EndConvoyData, EndConvoyErrors, EndConvoyResponses, GetActiveRouteData, GetActiveRouteErrors, GetActiveRouteResponses, GetConvoyData, GetConvoyErrors, GetConvoyResponses, GetMessagesData, GetMessagesErrors, GetMessagesResponses, GetMyProfileData, GetMyProfileResponses, GetSpatialConfigData, GetSpatialConfigResponses, GetUserProfileData, GetUserProfileErrors, GetUserProfileResponses, HealthCheckData, HealthCheckResponses, InviteToConvoyData, InviteToConvoyErrors, InviteToConvoyResponses, JoinConvoyData, JoinConvoyErrors, JoinConvoyResponses, KickMemberData, KickMemberErrors, KickMemberResponses, LeaveConvoyData, LeaveConvoyErrors, LeaveConvoyResponses, ListCarsData, ListCarsResponses, ListFriendRequestsData, ListFriendRequestsResponses, ListFriendsData, ListFriendsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, RefreshData, RefreshErrors, RefreshResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveFriendData, RemoveFriendErrors, RemoveFriendResponses, RequestToJoinData, RequestToJoinErrors, RequestToJoinResponses, SearchUsersData, SearchUsersErrors, SearchUsersResponses, SendFriendRequestData, SendFriendRequestErrors, SendFriendRequestResponses, SendMessageData, SendMessageErrors, SendMessageResponses, SendQuickActionData, SendQuickActionErrors, SendQuickActionResponses, SetRouteData, SetRouteErrors, SetRouteResponses, UpdateCarData, UpdateCarErrors, UpdateCarResponses, UpdateConvoyData, UpdateConvoyErrors, UpdateConvoyResponses, UpdateMyProfileData, UpdateMyProfileErrors, UpdateMyProfileResponses } from './types.gen';
+import type { AcceptFriendRequestData, AcceptFriendRequestErrors, AcceptFriendRequestResponses, AcceptJoinRequestData, AcceptJoinRequestErrors, AcceptJoinRequestResponses, ActivateCarData, ActivateCarErrors, ActivateCarResponses, AuthWithAppleData, AuthWithAppleErrors, AuthWithAppleResponses, CheckUsernameData, CheckUsernameErrors, CheckUsernameResponses, CreateCarData, CreateCarErrors, CreateCarResponses, CreateConvoyData, CreateConvoyErrors, CreateConvoyResponses, DebugSpatialStoreData, DebugSpatialStoreResponses, DeclineFriendRequestData, DeclineFriendRequestErrors, DeclineFriendRequestResponses, DeclineJoinRequestData, DeclineJoinRequestErrors, DeclineJoinRequestResponses, DeleteAccountData, DeleteAccountResponses, DeleteCarData, DeleteCarErrors, DeleteCarResponses, EndConvoyData, EndConvoyErrors, EndConvoyResponses, GetActiveRouteData, GetActiveRouteErrors, GetActiveRouteResponses, GetConvoyData, GetConvoyErrors, GetConvoyResponses, GetMessagesData, GetMessagesErrors, GetMessagesResponses, GetMyProfileData, GetMyProfileResponses, GetSpatialConfigData, GetSpatialConfigResponses, GetUserProfileData, GetUserProfileErrors, GetUserProfileResponses, HealthCheckData, HealthCheckResponses, InviteToConvoyData, InviteToConvoyErrors, InviteToConvoyResponses, JoinConvoyData, JoinConvoyErrors, JoinConvoyResponses, KickMemberData, KickMemberErrors, KickMemberResponses, LeaveConvoyData, LeaveConvoyErrors, LeaveConvoyResponses, ListCarsData, ListCarsResponses, ListFriendRequestsData, ListFriendRequestsResponses, ListFriendsData, ListFriendsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, RefreshData, RefreshErrors, RefreshResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveFriendData, RemoveFriendErrors, RemoveFriendResponses, RequestToJoinData, RequestToJoinErrors, RequestToJoinResponses, SearchUsersData, SearchUsersErrors, SearchUsersResponses, SendFriendRequestData, SendFriendRequestErrors, SendFriendRequestResponses, SendMessageData, SendMessageErrors, SendMessageResponses, SendQuickActionData, SendQuickActionErrors, SendQuickActionResponses, SetRouteData, SetRouteErrors, SetRouteResponses, UpdateCarData, UpdateCarErrors, UpdateCarResponses, UpdateConvoyData, UpdateConvoyErrors, UpdateConvoyResponses, UpdateMyProfileData, UpdateMyProfileErrors, UpdateMyProfileResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -97,6 +97,21 @@ export const logout = <ThrowOnError extends boolean = false>(options: Options<Lo
         'Content-Type': 'application/json',
         ...options.headers
     }
+});
+
+/**
+ * Check Username
+ *
+ * Check whether a username is available for the current user to claim.
+ *
+ * Validates format and length, then checks uniqueness (case-insensitive).
+ * The caller's own current username is always reported available so a
+ * pre-filled handle during onboarding doesn't read as "taken".
+ */
+export const checkUsername = <ThrowOnError extends boolean = false>(options: Options<CheckUsernameData, ThrowOnError>) => (options.client ?? client).get<CheckUsernameResponses, CheckUsernameErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/users/check-username',
+    ...options
 });
 
 /**
@@ -517,6 +532,13 @@ export const setRoute = <ThrowOnError extends boolean = false>(options: Options<
  * and should be used for viewport cell computation.
  */
 export const getSpatialConfig = <ThrowOnError extends boolean = false>(options?: Options<GetSpatialConfigData, ThrowOnError>) => (options?.client ?? client).get<GetSpatialConfigResponses, unknown, ThrowOnError>({ url: '/spatial/config', ...options });
+
+/**
+ * Debug Spatial Store
+ *
+ * Dump the full state of the in-memory spatial store. Only available when DEBUG=true.
+ */
+export const debugSpatialStore = <ThrowOnError extends boolean = false>(options?: Options<DebugSpatialStoreData, ThrowOnError>) => (options?.client ?? client).get<DebugSpatialStoreResponses, unknown, ThrowOnError>({ url: '/spatial/debug', ...options });
 
 /**
  * Health Check

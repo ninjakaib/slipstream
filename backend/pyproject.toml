@@ -20,6 +20,7 @@ dependencies = [
     "structlog>=25.1.0",
     "uvicorn>=0.49.0",
     "websockets>=13.0",
+    "paracelsus[dev]>=0.15.0",
 ]
 
 [project.optional-dependencies]

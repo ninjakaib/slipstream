@@ -100,6 +100,7 @@ erDiagram
     VARCHAR(100) display_name "nullable"
     VARCHAR(255) email "nullable"
     VARCHAR(255) password_hash "nullable"
+    VARCHAR(32) phone_number "nullable"
     ENUM speed_unit
     DATETIME updated_at
     VARCHAR(20) username UK "indexed"

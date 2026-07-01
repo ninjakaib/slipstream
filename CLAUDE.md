@@ -152,6 +152,8 @@ slipstream/src/
 
 ### Frontend (partially implemented)
 - Auth flow (username/password login & register, token storage, auto-refresh)
+- Sign in with Apple (native expo-apple-authentication → /auth/apple)
+- Onboarding (Expo Router flow: welcome → name → username → phone → vehicle → units → permissions; persists profile + first car via API; completion tracked locally)
 - Live map with real-time driver markers via WebSocket
 - H3 viewport cell subscriptions (auto-computed from camera bounds)
 - Location tracking (foreground, adaptive interval)
@@ -161,11 +163,10 @@ slipstream/src/
 - Tab navigation (Home, Map, Explore)
 
 ### Frontend (not yet implemented)
-- Apple Sign In (backend ready, mobile flow not wired)
-- Onboarding (username setup, car entry for new users)
+- Google Sign In (button present but stubbed; no backend provider yet)
 - Convoy UI (create, join, lobby, chat, quick actions)
 - Social page (friends list, nearby drivers list, friend search)
-- Notifications (push registration, in-app banners)
+- Notifications (push registration, in-app banners — permission is requested in onboarding)
 - Marker enrichment (status colors, car info, smooth animation)
 - Driving HUD (speed, speed limit, road name)
 - Navigation / route planning

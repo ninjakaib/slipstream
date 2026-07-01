@@ -749,6 +749,10 @@ export type UpdateProfileRequest = {
      */
     email?: string | null;
     /**
+     * Phone Number
+     */
+    phone_number?: string | null;
+    /**
      * Avatar Url
      */
     avatar_url?: string | null;
@@ -780,6 +784,10 @@ export type UserProfile = {
      * Email
      */
     email?: string | null;
+    /**
+     * Phone Number
+     */
+    phone_number?: string | null;
     /**
      * Avatar Url
      */
@@ -814,6 +822,24 @@ export type UserSearchResult = {
      */
     avatar_url?: string | null;
     active_car?: CarSummary | null;
+};
+
+/**
+ * UsernameAvailability
+ */
+export type UsernameAvailability = {
+    /**
+     * Username
+     */
+    username: string;
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Reason
+     */
+    reason?: string | null;
 };
 
 /**
@@ -1006,6 +1032,36 @@ export type LogoutResponses = {
 };
 
 export type LogoutResponse = LogoutResponses[keyof LogoutResponses];
+
+export type CheckUsernameData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Username
+         */
+        username: string;
+    };
+    url: '/users/check-username';
+};
+
+export type CheckUsernameErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckUsernameError = CheckUsernameErrors[keyof CheckUsernameErrors];
+
+export type CheckUsernameResponses = {
+    /**
+     * Successful Response
+     */
+    200: UsernameAvailability;
+};
+
+export type CheckUsernameResponse = CheckUsernameResponses[keyof CheckUsernameResponses];
 
 export type DeleteAccountData = {
     body?: never;
@@ -1917,6 +1973,26 @@ export type GetSpatialConfigResponses = {
 };
 
 export type GetSpatialConfigResponse = GetSpatialConfigResponses[keyof GetSpatialConfigResponses];
+
+export type DebugSpatialStoreData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/spatial/debug';
+};
+
+export type DebugSpatialStoreResponses = {
+    /**
+     * Response Spatial-Debug Spatial Store
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type DebugSpatialStoreResponse = DebugSpatialStoreResponses[keyof DebugSpatialStoreResponses];
 
 export type HealthCheckData = {
     body?: never;
