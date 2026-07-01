@@ -1,26 +1,22 @@
 /**
  * Onboarding screen scaffold + shared typography.
  *
- * Provides the common chrome — black field, halftone backdrop, safe-area
- * insets, the progress header, and horizontal padding — so each step only
- * has to lay out its own body.
+ * The chrome (halftone background + progress header) lives once in
+ * `(onboarding)/_layout.tsx`, so this only lays out a step's own body: a padded
+ * content region (tap anywhere to dismiss the keyboard) and an optional footer
+ * that sticks to the bottom and rises with the keyboard.
  */
 import type { ReactNode } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
+  Keyboard,
   StyleSheet,
   Text,
   type TextProps,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import {
-  HalftoneBackground,
-  type Glow,
-} from "@/features/onboarding/components/halftone-background";
-import { OnboardingHeader } from "@/features/onboarding/components/onboarding-header";
 
 export const ONBOARDING_COLORS = {
   background: "#000000",
@@ -31,54 +27,40 @@ export const ONBOARDING_COLORS = {
 
 interface ScaffoldProps {
   children: ReactNode;
-  /** 0–1 progress for the header track. Omit to hide the header entirely. */
-  progress?: number;
-  showBack?: boolean;
-  onBack?: () => void;
-  glows?: Glow[];
-  /** Avoid the keyboard (screens with a text field + bottom button). */
-  keyboardAvoiding?: boolean;
+  /** Bottom-pinned content (e.g. the Continue button) that rises with the keyboard. */
+  footer?: ReactNode;
+  /** Tap anywhere in the content region to dismiss the keyboard. Default true. */
+  dismissKeyboardOnTap?: boolean;
 }
 
 export function OnboardingScaffold({
   children,
-  progress,
-  showBack = true,
-  onBack,
-  glows,
-  keyboardAvoiding = false,
+  footer,
+  dismissKeyboardOnTap = true,
 }: ScaffoldProps) {
   const insets = useSafeAreaInsets();
 
-  const body = (
-    <View style={[styles.content, { paddingBottom: insets.bottom + 16 }]}>
-      {progress !== undefined && (
-        <View style={styles.headerWrap}>
-          <OnboardingHeader
-            progress={progress}
-            showBack={showBack}
-            onBack={onBack}
-          />
-        </View>
-      )}
-      {children}
-    </View>
-  );
+  const content = <View style={styles.content}>{children}</View>;
 
   return (
     <View style={styles.root}>
-      <HalftoneBackground glows={glows} />
-      <View style={{ height: insets.top }} />
-      {keyboardAvoiding ? (
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={insets.top}
+      {dismissKeyboardOnTap ? (
+        <TouchableWithoutFeedback
+          accessible={false}
+          onPress={() => Keyboard.dismiss()}
         >
-          {body}
-        </KeyboardAvoidingView>
+          {content}
+        </TouchableWithoutFeedback>
       ) : (
-        body
+        content
+      )}
+
+      {footer && (
+        <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+            {footer}
+          </View>
+        </KeyboardStickyView>
       )}
     </View>
   );
@@ -93,15 +75,15 @@ export function OnboardingSubtitle({ style, ...rest }: TextProps) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: ONBOARDING_COLORS.background },
+  root: { flex: 1 },
   flex: { flex: 1 },
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 8,
   },
-  headerWrap: {
-    marginBottom: 28,
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
   },
   title: {
     color: ONBOARDING_COLORS.textPrimary,

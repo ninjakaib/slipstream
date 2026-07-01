@@ -1,19 +1,16 @@
 /**
- * SelectSheet — a simple bottom-sheet picker (title, optional search, scrollable
- * option list). Used for the Year and Make selectors on the vehicle step.
+ * SelectSheet — a bottom-sheet picker (title, optional search, scrollable option
+ * list) built on the native `@expo/ui` bottom sheet (SwiftUI sheet on iOS), so it
+ * gets native presentation, drag-to-dismiss, and keyboard handling for free.
+ * Used for the Country, Year, and Make selectors.
  */
 import { useMemo, useState } from "react";
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { SymbolView } from "expo-symbols";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  BottomSheet,
+  BottomSheetTextInput,
+} from "@expo/ui/community/bottom-sheet";
 
 import { ONBOARDING_COLORS } from "@/features/onboarding/components/scaffold";
 
@@ -45,7 +42,6 @@ export function SelectSheet({
   onSelect,
   onClose,
 }: SelectSheetProps) {
-  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -60,128 +56,94 @@ export function SelectSheet({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={handleClose}
-      statusBarTranslucent
+    <BottomSheet
+      index={visible ? 0 : -1}
+      snapPoints={["90%"]}
+      enablePanDownToClose
+      onClose={handleClose}
+      backgroundStyle={styles.sheetBackground}
     >
-      <View style={styles.backdropRoot}>
-        <Pressable style={styles.backdrop} onPress={handleClose} />
-        <View style={[styles.panel, { paddingBottom: insets.bottom + 12 }]}>
-          <View style={styles.grabber} />
-          <View style={styles.header}>
-            <Text style={styles.title}>{title}</Text>
-            <Pressable onPress={handleClose} hitSlop={10} style={styles.closeBtn}>
-              <SymbolView
-                name="xmark"
-                size={14}
-                tintColor="#FFFFFF"
-                weight="bold"
-                fallback={null}
-              />
-            </Pressable>
-          </View>
-
-          {searchable && (
-            <View style={styles.search}>
-              <SymbolView
-                name="magnifyingglass"
-                size={16}
-                tintColor={ONBOARDING_COLORS.textMuted}
-                fallback={null}
-              />
-              <TextInput
-                style={styles.searchInput}
-                placeholder={searchPlaceholder}
-                placeholderTextColor={ONBOARDING_COLORS.textMuted}
-                value={query}
-                onChangeText={setQuery}
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
-            </View>
-          )}
-
-          <FlatList
-            data={filtered}
-            keyExtractor={(item) => item.value}
-            keyboardShouldPersistTaps="handled"
-            style={styles.list}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => {
-              const selected = item.value === selectedValue;
-              return (
-                <Pressable
-                  onPress={() => {
-                    onSelect(item.value);
-                    handleClose();
-                  }}
-                  style={({ pressed }) => [
-                    styles.row,
-                    selected && styles.rowSelected,
-                    pressed && styles.rowPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.rowLabel,
-                      item.accent && styles.rowLabelAccent,
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                  {selected && (
-                    <SymbolView
-                      name="checkmark"
-                      size={16}
-                      tintColor="#FFFFFF"
-                      weight="bold"
-                      fallback={null}
-                    />
-                  )}
-                </Pressable>
-              );
-            }}
-            ListEmptyComponent={
-              <Text style={styles.empty}>No matches</Text>
-            }
-          />
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>{title}</Text>
+          <Pressable onPress={handleClose} hitSlop={10} style={styles.closeBtn}>
+            <SymbolView
+              name="xmark"
+              size={14}
+              tintColor="#FFFFFF"
+              weight="bold"
+              fallback={null}
+            />
+          </Pressable>
         </View>
+
+        {searchable && (
+          <View style={styles.search}>
+            <SymbolView
+              name="magnifyingglass"
+              size={16}
+              tintColor={ONBOARDING_COLORS.textMuted}
+              fallback={null}
+            />
+            <BottomSheetTextInput
+              style={styles.searchInput}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={ONBOARDING_COLORS.textMuted}
+              value={query}
+              onChangeText={setQuery}
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+          </View>
+        )}
+
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.value}
+          keyboardShouldPersistTaps="handled"
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => {
+            const selected = item.value === selectedValue;
+            return (
+              <Pressable
+                onPress={() => {
+                  onSelect(item.value);
+                  handleClose();
+                }}
+                style={({ pressed }) => [
+                  styles.row,
+                  selected && styles.rowSelected,
+                  pressed && styles.rowPressed,
+                ]}
+              >
+                <Text
+                  style={[styles.rowLabel, item.accent && styles.rowLabelAccent]}
+                >
+                  {item.label}
+                </Text>
+                {selected && (
+                  <SymbolView
+                    name="checkmark"
+                    size={16}
+                    tintColor="#FFFFFF"
+                    weight="bold"
+                    fallback={null}
+                  />
+                )}
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={<Text style={styles.empty}>No matches</Text>}
+        />
       </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdropRoot: { flex: 1, justifyContent: "flex-end" },
-  backdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.55)",
-  },
-  panel: {
-    maxHeight: "75%",
-    backgroundColor: "#161618",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  grabber: {
-    alignSelf: "center",
-    width: 40,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    marginBottom: 12,
-  },
+  sheetBackground: { backgroundColor: "#161618" },
+  container: { flex: 1, paddingHorizontal: 18, paddingTop: 8 },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -208,8 +170,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
   },
   searchInput: { flex: 1, color: "#FFFFFF", fontSize: 16 },
-  list: { flexGrow: 0 },
-  listContent: { paddingBottom: 8, gap: 10 },
+  list: { flex: 1 },
+  listContent: { paddingBottom: 24, gap: 10 },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -225,5 +187,9 @@ const styles = StyleSheet.create({
   rowPressed: { opacity: 0.7 },
   rowLabel: { color: "#FFFFFF", fontSize: 17, fontWeight: "600" },
   rowLabelAccent: { color: "#2D8CFF" },
-  empty: { color: ONBOARDING_COLORS.textMuted, textAlign: "center", paddingVertical: 24 },
+  empty: {
+    color: ONBOARDING_COLORS.textMuted,
+    textAlign: "center",
+    paddingVertical: 24,
+  },
 });

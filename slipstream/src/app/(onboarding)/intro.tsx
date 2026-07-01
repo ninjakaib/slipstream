@@ -20,14 +20,7 @@ import {
   OnboardingSubtitle,
   ONBOARDING_COLORS,
 } from "@/features/onboarding/components/scaffold";
-import type { Glow } from "@/features/onboarding/components/halftone-background";
-import { STEP_PROGRESS } from "@/features/onboarding/lib/steps";
 import { navReplace, ONBOARDING_ROUTES } from "@/lib/nav";
-
-const GLOWS: Glow[] = [
-  { x: 0.5, y: 0.3, radius: 0.4, color: "#FF3B3B", opacity: 0.26 },
-  { x: 0.5, y: 0.82, radius: 0.4, color: "#3D5BFF", opacity: 0.18 },
-];
 
 const AUTO_ADVANCE_MS = 2400;
 
@@ -70,7 +63,7 @@ export default function IntroScreen() {
 
   return (
     <Pressable style={styles.flex} onPress={advance}>
-      <OnboardingScaffold progress={STEP_PROGRESS.intro} showBack={false} glows={GLOWS}>
+      <OnboardingScaffold dismissKeyboardOnTap={false}>
         <View style={styles.body}>
           <View style={styles.stage}>
             <Animated.View style={[styles.spotlight, glowStyle]} />

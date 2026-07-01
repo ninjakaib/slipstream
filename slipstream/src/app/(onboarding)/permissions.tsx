@@ -1,6 +1,14 @@
 /** Final step: request device permissions, then persist the draft and finish. */
-import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  AppState,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
 
 import {
@@ -10,14 +18,15 @@ import {
   ONBOARDING_COLORS,
 } from "@/features/onboarding/components/scaffold";
 import { PrimaryButton } from "@/features/onboarding/components/buttons";
-import { useOnboardingDraft } from "@/features/onboarding/onboarding-draft-context";
+import { useOnboardingStore } from "@/stores/onboarding-store";
 import { useOnboarding } from "@/contexts/onboarding-context";
-import { STEP_PROGRESS } from "@/features/onboarding/lib/steps";
-import type { Glow } from "@/features/onboarding/components/halftone-background";
 import {
   requestLocationAlways,
   requestMotion,
   requestNotifications,
+  checkLocationAlways,
+  checkMotion,
+  checkNotifications,
 } from "@/features/onboarding/lib/permissions";
 
 type PermKey = "location" | "motion" | "notifications";
@@ -29,6 +38,7 @@ interface PermRow {
   title: string;
   description: string;
   request: () => Promise<boolean>;
+  check: () => Promise<boolean>;
 }
 
 const ROWS: PermRow[] = [
@@ -39,6 +49,7 @@ const ROWS: PermRow[] = [
     description:
       'Select "While Using App" first, then "Always Allow" on the second location prompt.',
     request: requestLocationAlways,
+    check: checkLocationAlways,
   },
   {
     key: "motion",
@@ -46,6 +57,7 @@ const ROWS: PermRow[] = [
     title: "Enable Motion Access",
     description: 'Select "Allow" so SlipStream can confirm you are in a moving car.',
     request: requestMotion,
+    check: checkMotion,
   },
   {
     key: "notifications",
@@ -53,16 +65,12 @@ const ROWS: PermRow[] = [
     title: "Enable Notifications",
     description: 'Select "Allow" so you get drive recaps and safety alerts.',
     request: requestNotifications,
+    check: checkNotifications,
   },
 ];
 
-const GLOWS: Glow[] = [
-  { x: 0.5, y: 0.5, radius: 0.45, color: "#7A3DFF", opacity: 0.16 },
-  { x: 0.5, y: 0.7, radius: 0.35, color: "#FF4D4D", opacity: 0.12 },
-];
-
 export default function PermissionsScreen() {
-  const { submit } = useOnboardingDraft();
+  const submit = useOnboardingStore((s) => s.submit);
   const { complete } = useOnboarding();
 
   const [states, setStates] = useState<Record<PermKey, PermState>>({
@@ -73,7 +81,36 @@ export default function PermissionsScreen() {
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Reconcile the UI with the real device permissions. Runs on mount and every
+  // time the app returns to the foreground (e.g. after the user grants/revokes
+  // a permission from Settings), so the buttons always reflect reality.
+  const syncStates = useCallback(async () => {
+    const results = await Promise.all(ROWS.map((row) => row.check()));
+    setStates((prev) => {
+      const next = { ...prev };
+      ROWS.forEach((row, i) => {
+        if (prev[row.key] === "pending") return; // don't clobber an in-flight request
+        if (results[i]) next[row.key] = "granted";
+        else if (prev[row.key] === "granted") next[row.key] = "idle"; // revoked from Settings
+      });
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    syncStates();
+    const sub = AppState.addEventListener("change", (status) => {
+      if (status === "active") syncStates();
+    });
+    return () => sub.remove();
+  }, [syncStates]);
+
   const handleRequest = async (row: PermRow) => {
+    // Once denied, iOS won't re-prompt — send the user to Settings instead.
+    if (states[row.key] === "denied") {
+      Linking.openSettings();
+      return;
+    }
     setStates((s) => ({ ...s, [row.key]: "pending" }));
     const granted = await row.request();
     setStates((s) => ({ ...s, [row.key]: granted ? "granted" : "denied" }));
@@ -93,7 +130,20 @@ export default function PermissionsScreen() {
   };
 
   return (
-    <OnboardingScaffold progress={STEP_PROGRESS.permissions} glows={GLOWS}>
+    <OnboardingScaffold
+      dismissKeyboardOnTap={false}
+      footer={
+        <>
+          {error && <Text style={styles.error}>{error}</Text>}
+          <PrimaryButton
+            label="Continue"
+            icon="arrow.right"
+            loading={finishing}
+            onPress={handleFinish}
+          />
+        </>
+      }
+    >
       <OnboardingTitle>Enable permissions</OnboardingTitle>
       <OnboardingSubtitle>
         Turn on permissions for automatic drive tracking to work properly.
@@ -109,21 +159,12 @@ export default function PermissionsScreen() {
               <Text style={styles.rowTitle}>{row.title}</Text>
               <Text style={styles.rowDesc}>{row.description}</Text>
             </View>
-            <EnableButton state={states[row.key]} onPress={() => handleRequest(row)} />
+            <View style={styles.btnSlot}>
+              <EnableButton state={states[row.key]} onPress={() => handleRequest(row)} />
+            </View>
           </View>
         ))}
       </View>
-
-      <View style={styles.spacer} />
-
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      <PrimaryButton
-        label="Continue"
-        icon="arrow.right"
-        loading={finishing}
-        onPress={handleFinish}
-      />
     </OnboardingScaffold>
   );
 }
@@ -154,7 +195,9 @@ function EnableButton({
       onPress={onPress}
       style={({ pressed }) => [styles.enableBtn, pressed && styles.pressed]}
     >
-      <Text style={styles.enableText}>{state === "denied" ? "Retry" : "Enable"}</Text>
+      <Text style={styles.enableText} numberOfLines={1}>
+        {state === "denied" ? "Retry" : "Enable"}
+      </Text>
     </Pressable>
   );
 }
@@ -180,6 +223,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rowText: { flex: 1 },
+  // Fixed-width slot, right-aligned, so the text column stays put whether the
+  // control is the full-width "Enable" pill or the compact checkmark circle.
+  btnSlot: { width: 84, alignItems: "flex-end", justifyContent: "center" },
   rowTitle: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
   rowDesc: {
     color: ONBOARDING_COLORS.textSecondary,
@@ -188,17 +234,15 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   enableBtn: {
-    minWidth: 78,
+    width: 84,
     height: 40,
     borderRadius: 999,
-    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.12)",
   },
-  enabledBtn: { backgroundColor: "#FFFFFF", minWidth: 44 },
+  enabledBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#FFFFFF" },
   enableText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
   pressed: { opacity: 0.7 },
   error: { color: "#FF6B6B", fontSize: 14, textAlign: "center", marginBottom: 12 },
-  spacer: { flex: 1 },
 });

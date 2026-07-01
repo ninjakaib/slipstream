@@ -11,22 +11,21 @@ import {
 } from "@/features/onboarding/components/scaffold";
 import { OnboardingInput } from "@/features/onboarding/components/onboarding-input";
 import { PrimaryButton } from "@/features/onboarding/components/buttons";
-import { useOnboardingDraft } from "@/features/onboarding/onboarding-draft-context";
-import { STEP_PROGRESS } from "@/features/onboarding/lib/steps";
+import { useOnboardingStore } from "@/stores/onboarding-store";
 import { checkUsername } from "@/lib/api/sdk.gen";
 import { navPush, ONBOARDING_ROUTES } from "@/lib/nav";
 
 type Status = "idle" | "checking" | "available" | "unavailable";
 
 export default function UsernameScreen() {
-  const { draft, setUsername } = useOnboardingDraft();
-  const [value, setValue] = useState(draft.username);
+  const username = useOnboardingStore((s) => s.username);
+  const setUsername = useOnboardingStore((s) => s.setUsername);
   const [status, setStatus] = useState<Status>("idle");
   const [reason, setReason] = useState<string | null>(null);
   const reqId = useRef(0);
 
   useEffect(() => {
-    const handle = value.trim();
+    const handle = username.trim();
     setReason(null);
 
     if (handle.length === 0) {
@@ -59,15 +58,23 @@ export default function UsernameScreen() {
     }, 450);
 
     return () => clearTimeout(timer);
-  }, [value]);
+  }, [username]);
 
   const handleContinue = () => {
-    setUsername(value.trim());
+    setUsername(username.trim());
     navPush(ONBOARDING_ROUTES.phone);
   };
 
   return (
-    <OnboardingScaffold progress={STEP_PROGRESS.username} keyboardAvoiding>
+    <OnboardingScaffold
+      footer={
+        <PrimaryButton
+          label="Continue"
+          onPress={handleContinue}
+          disabled={status !== "available"}
+        />
+      }
+    >
       <OnboardingTitle>Pick a username</OnboardingTitle>
       <OnboardingSubtitle>
         This is your unique handle. It can't be changed later.
@@ -76,8 +83,8 @@ export default function UsernameScreen() {
       <View style={styles.form}>
         <OnboardingInput
           placeholder="username"
-          value={value}
-          onChangeText={(t) => setValue(t.replace(/\s/g, ""))}
+          value={username}
+          onChangeText={(t) => setUsername(t.replace(/\s/g, ""))}
           autoFocus
           autoCapitalize="none"
           autoCorrect={false}
@@ -89,16 +96,8 @@ export default function UsernameScreen() {
           trailing={<StatusIndicator status={status} />}
         />
 
-        <StatusLine status={status} reason={reason} handle={value.trim()} />
-
-        <PrimaryButton
-          label="Continue"
-          onPress={handleContinue}
-          disabled={status !== "available"}
-        />
+        <StatusLine status={status} reason={reason} handle={username.trim()} />
       </View>
-
-      <View style={styles.spacer} />
     </OnboardingScaffold>
   );
 }
@@ -154,7 +153,6 @@ function StatusLine({
 
 const styles = StyleSheet.create({
   form: { marginTop: 28, gap: 14 },
-  spacer: { flex: 1 },
   at: { color: ONBOARDING_COLORS.textSecondary, fontSize: 18, fontWeight: "600" },
   badge: {
     width: 24,

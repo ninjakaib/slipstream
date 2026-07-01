@@ -1,14 +1,14 @@
 {
+  "permissions": {
+    "allow": [
+      "mcp__argent"
+    ]
+  },
   "enabledPlugins": {
     "mapbox@claude-plugins-official": true,
     "swift-concurrency-pro@swift-concurrency-agent-skill": false,
     "swiftui-pro@swiftui-agent-skill": false,
     "swift-lsp@claude-plugins-official": false,
     "expo@claude-plugins-official": true
-  },
-  "permissions": {
-    "allow": [
-      "mcp__argent"
-    ]
   }
 }

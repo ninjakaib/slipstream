@@ -9,8 +9,7 @@ import {
   ONBOARDING_COLORS,
 } from "@/features/onboarding/components/scaffold";
 import { PrimaryButton } from "@/features/onboarding/components/buttons";
-import { useOnboardingDraft } from "@/features/onboarding/onboarding-draft-context";
-import { STEP_PROGRESS } from "@/features/onboarding/lib/steps";
+import { useOnboardingStore } from "@/stores/onboarding-store";
 import type { SpeedUnit } from "@/lib/api/types.gen";
 import { navPush, ONBOARDING_ROUTES } from "@/lib/nav";
 
@@ -20,17 +19,26 @@ const OPTIONS: { value: SpeedUnit; label: string }[] = [
 ];
 
 export default function UnitsScreen() {
-  const { draft, setSpeedUnit } = useOnboardingDraft();
+  const speedUnit = useOnboardingStore((s) => s.speedUnit);
+  const setSpeedUnit = useOnboardingStore((s) => s.setSpeedUnit);
 
   return (
-    <OnboardingScaffold progress={STEP_PROGRESS.units}>
+    <OnboardingScaffold
+      dismissKeyboardOnTap={false}
+      footer={
+        <PrimaryButton
+          label="Continue"
+          onPress={() => navPush(ONBOARDING_ROUTES.permissions)}
+        />
+      }
+    >
       <OnboardingTitle>Choose your units</OnboardingTitle>
       <OnboardingSubtitle>How do you measure speed?</OnboardingSubtitle>
 
       <View style={styles.card}>
         <View style={styles.segment}>
           {OPTIONS.map((opt) => {
-            const selected = draft.speedUnit === opt.value;
+            const selected = speedUnit === opt.value;
             return (
               <Pressable
                 key={opt.value}
@@ -49,13 +57,6 @@ export default function UnitsScreen() {
         </View>
         <Text style={styles.note}>You can change this later in Settings.</Text>
       </View>
-
-      <View style={styles.spacer} />
-
-      <PrimaryButton
-        label="Continue"
-        onPress={() => navPush(ONBOARDING_ROUTES.permissions)}
-      />
     </OnboardingScaffold>
   );
 }
@@ -89,5 +90,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: 12,
   },
-  spacer: { flex: 1 },
 });

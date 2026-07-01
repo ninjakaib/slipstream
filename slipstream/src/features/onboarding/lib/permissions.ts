@@ -41,3 +41,35 @@ export async function requestNotifications(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Read-only status checks — these never show a prompt, so they're safe to run
+ * on mount / on app foreground to keep the UI in sync with the actual device
+ * permissions. "Always Allow" is considered granted only when background is.
+ */
+export async function checkLocationAlways(): Promise<boolean> {
+  try {
+    const bg = await Location.getBackgroundPermissionsAsync();
+    return bg.status === "granted";
+  } catch {
+    return false;
+  }
+}
+
+export async function checkMotion(): Promise<boolean> {
+  try {
+    const res = await Pedometer.getPermissionsAsync();
+    return res.granted;
+  } catch {
+    return false;
+  }
+}
+
+export async function checkNotifications(): Promise<boolean> {
+  try {
+    const res = await Notifications.getPermissionsAsync();
+    return res.granted;
+  } catch {
+    return false;
+  }
+}
